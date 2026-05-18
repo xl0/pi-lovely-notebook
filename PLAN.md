@@ -1,146 +1,169 @@
 # Pi notebook package
 
-## Status
+## Plan
 
-- [x] Repo is a real Pi package with a notebook extension entrypoint.
-- [x] Notebook tooling exists end-to-end: summary, cell reads, cell edits, structural ops, output/attachment reads.
-- [x] Tests cover core logic, tool runners, and multi-step workflows.
-- [ ] Verify against real notebooks through Pi, not just tests + local runner.
+Add notebook execution through a narrow VSCode companion extension, not by implementing Jupyter kernel/session management inside the Pi extension.
+
+The existing Pi package remains the file-oriented notebook tool layer: summarize, read, edit, structural mutation, output/attachment reads. Execution becomes a bridge-backed capability because VSCode/Jupyter owns the live notebook document, selected kernel, dirty state, output UI, and interactive execution semantics.
+
+Initial target: execute open VSCode notebooks/cells through the currently selected VSCode Jupyter kernel, optionally save after execution so Pi's existing disk-based tools can inspect outputs.
 
 ## Constraints / decisions
 
-- Keep `index.ts` as the Pi adapter seam.
-- Keep `tools.ts` as the runner/test seam. Do not merge it into `index.ts`.
-- Queueing and path normalization are adapter concerns, not notebook-core concerns.
-- Prefer one small internal mutation helper over a broader `NotebookSession` / fs adapter.
-- `PLAN.md` is the main actionable plan. `IMPROVEMENTS-PLAN.md` remains as a more detailed improvement note.
+- Keep `extensions/notebook/index.ts` as the Pi adapter seam.
+- Keep `extensions/notebook/tools.ts` as the runner/test seam.
+- Keep pure notebook JSON operations in `extensions/notebook/notebook.ts`; do not mix kernel execution into that module.
+- Add the VSCode bridge in this repo as a separate companion package, not a separate repo yet.
+- Do not expose generic VSCode APIs. The bridge should provide a narrow, purpose-built RPC surface.
+- Pi still normalizes notebook paths and queues per-file mutations/execution calls.
+- VSCode bridge should execute using the currently selected VSCode/Jupyter kernel.
+- Prefer explicit bridge-backed execution semantics over pretending Pi has access to live kernel state.
+- Keep dependency freedom: VSCode extension deps and test deps are allowed when needed.
 
-## Why these priorities
+## Proposed repo layout
 
-- Main correctness risk: Pi can run sibling tool calls in parallel; unqueued notebook mutations can lose writes.
-- Main locality issue: mutation runners repeat load → select → ensure ids → mutate → save → format confirmation.
-- `tools.ts` vs `index.ts` is not the real problem. The existing split is useful because tests and the smoke runner call runners directly without booting Pi.
+```txt
+extensions/notebook/                 # existing Pi extension
+  index.ts                           # register tools, path normalization, queueing
+  tools.ts                           # schemas + runner/test seam
+  notebook.ts                        # notebook JSON core
+  vscode-bridge.ts                   # Pi-side bridge discovery/client
 
-## Current priorities
+shared/
+  notebook-bridge-protocol.ts        # request/response types/constants
 
-### P0. Pi package / doc compliance
+vscode-bridge/
+  package.json
+  tsconfig.json
+  src/extension.ts                   # VSCode activation
+  src/server.ts                      # local RPC/auth/router
+  src/handlers.ts                    # testable orchestration
+  src/notebooks.ts                   # thin VSCode Notebook API adapter
+```
 
-- [x] Add `@mariozechner/pi-ai: "*"` to `peerDependencies`.
-  - note: `tools.ts` imports `@mariozechner/pi-ai` for `StringEnum`; Pi package docs want bundled Pi core imports declared as peers.
-  - verify: `bun run check`
-- [x] Normalize notebook path args at the adapter seam.
-  - [x] strip one leading `@` (models sometimes include it — see pi docs extensions.md line 1670)
-  - [x] resolve relative paths against `ctx.cwd`
-  - [x] pass normalized absolute paths into runners / queueing
-  - preferred shape: normalize once in `index.ts` `execute(..., ctx)` before calling runners
-  - verify: focused tool/adapter test if practical, else local smoke + `bun run check`
+## Bridge shape
 
-### P1. Correctness under concurrent mutations
+Connection:
 
-- [x] Wrap full read-modify-write windows in `withFileMutationQueue()` for:
-  - [x] `notebook_write_cell`
-  - [x] `notebook_edit_cell`
-  - [x] `notebook_insert`
-  - [x] `notebook_delete`
-  - [x] `notebook_move`
-  - [x] `notebook_merge`
-  - [x] `notebook_clear_outputs`
-- [x] Keep read-only tools unqueued.
-- [x] Queue at the adapter seam, not in notebook-core.
-  - preferred shape: `withFileMutationQueue(normalizedPath, () => runNotebookX({ ...params, path: normalizedPath }))`
-- [x] Verification: `bun test` + `bun run check`.
-  - concurrency regression test not added in this pass
+- VSCode extension starts a localhost or Unix-socket RPC server.
+- It writes connection info + token to a discoverable file, likely `.pi/notebook-vscode-bridge.json` under the workspace/project.
+- Pi tools read that file and call the bridge.
 
-### P2. Mutation orchestration cleanup
+Initial RPC methods:
 
-- [x] Introduce one internal helper for load → ensure ids → mutate → save.
-  - target shape:
-    ```ts
-    async function mutateNotebook(path, mutate) {
-      const notebook = await loadNotebook(path)
-      const assigned = ensureCellIds(notebook)
-      const result = mutate(notebook)
-      await saveNotebook(path, notebook)
-      return { assigned, result }
-    }
-    ```
-- [x] Move repeated mutation runner boilerplate onto that helper.
-- [x] Keep tool-specific selector validation / confirmation formatting in each runner.
-- [x] Do not add a broader filesystem abstraction unless tests are actually blocked by disk I/O.
-- [x] Verify existing mutation/workflow tests still pass unchanged.
+- `health`
+- `listOpenNotebooks`
+- `executeCell(path, cellId? | index?, saveAfter?)`
+- `executeAll(path, saveAfter?)`
+- maybe `saveNotebook(path)` if execution and save should stay separate
 
-### P3. Public interface trim
+Initial Pi tools:
 
-- [x] Remove `readCellsById` export unless an actual near-term tool needs it.
-- [x] Remove `readCellRange` export unless an actual near-term tool needs it.
-- [x] Update tests to cover supported read primitives instead:
-  - [x] `readAllCells`
-  - [x] `readCellById`
-  - [x] index reads through tool runners
-- [x] Verify: `bun test`
+- `notebook_execute_cell({ path, cellId?|index?, saveAfter? })`
+- `notebook_execute_all({ path, saveAfter? })`
 
-## Non-goals for this pass
+Likely semantics:
 
-- [x] Do not merge `tools.ts` into `index.ts`.
-- [x] Do not build a full `NotebookSession` / filesystem adapter now.
-- [x] Do not split formatting into a separate presentation module yet.
-- [x] Do not normalize outputs into a new module yet.
-- [x] Do not touch the `scripts/run-notebook-tool.ts` cast unless already nearby.
+- notebook must be open in VSCode, or bridge returns a clear error
+- execution uses VSCode's current kernel for that notebook
+- outputs appear in VSCode
+- `saveAfter` defaults to true so disk-based Pi tools can read outputs after execution
+- if notebook is dirty, execute the in-memory VSCode document, then save when `saveAfter` is true
+- selectors should prefer VSCode-visible cell identity if available; otherwise Pi may map `cellId -> index` from disk only when the document is not structurally dirty
 
-## Suggested execution order
+## Testing strategy
 
-- [x] 1. Package/doc compliance: peer dep, path normalization.
-- [x] 2. Queue all mutation tools with `withFileMutationQueue()`.
-- [x] 3. Consolidate mutation load/id/save helper.
-- [x] 4. Remove dead read exports if still unused.
-- [x] 5. Re-run `bun test` and `bun run check` after each meaningful step.
+Use three layers:
 
-## Existing work, mostly done
+1. Pure protocol/unit tests
+   - shared request/response parsing
+   - token/auth behavior
+   - path/URI normalization helpers
+   - selector validation
+   - error/result shape
 
-### Tooling
+2. Pi-side bridge client tests
+   - start a mock local bridge server
+   - write temp bridge connection file
+   - call Pi runner functions
+   - assert request body, auth, response formatting, failure modes
+   - no VSCode dependency
 
-- [x] Add Biome config + package scripts.
-- [x] Add `typecheck`; make `check` run typecheck + Biome.
-- [x] Install `bun-types` and wire TS to use it directly.
-- [x] Tighten TS config; fix resulting type issues.
-- [x] Migrate Biome config and clear current lint warnings.
-- [ ] Refresh lockfile / verify CLI once Bun tempdir issue is gone.
+3. VSCode extension tests
+   - unit-test `handlers.ts` with a fake `NotebookHost`
+   - light VSCode integration tests for activation/server/notebook discovery using `@vscode/test-electron`
+   - keep full VSCode+Jupyter kernel execution as manual/smoke first; automate later only if stable enough
 
-### Package scaffold
+Design for testability:
 
-- [x] Turn repo root into a Pi package.
-- [x] Add extension entry under `extensions/notebook/`.
-- [x] Set up minimal `bun test` checks.
+```ts
+interface NotebookHost {
+  listOpenNotebooks(): NotebookRef[]
+  executeCell(path: string, selector: Selector): Promise<ExecutionResult>
+  executeAll(path: string): Promise<ExecutionResult>
+  save(path: string): Promise<void>
+}
+```
 
-### Read-only notebook support
+RPC handlers should depend on `NotebookHost`, not directly on `vscode` globals.
 
-- [x] Implement notebook parse/summary/read core.
-- [x] Implement `notebook_summary`.
-- [x] Implement `notebook_read_cell`.
+## Todo
 
-### Mutation support
+### P0. Design/protocol
 
-- [x] Implement load/save mutation path.
-- [x] Implement `notebook_write_cell`.
-- [x] Implement `notebook_edit_cell`.
-- [x] Define / implement cell id normalization helpers.
+- [ ] Define bridge protocol request/response types in `shared/notebook-bridge-protocol.ts`.
+- [ ] Decide connection file path and schema.
+- [ ] Decide RPC transport: localhost HTTP vs Unix socket.
+- [ ] Decide auth token generation/storage.
+- [ ] Decide exact dirty-notebook behavior.
+- [ ] Decide selector semantics for `cellId` when VSCode document differs from disk.
+- [ ] Add/update ADR for same-repo VSCode companion extension.
+- [ ] Add/update ADR for VSCode/Jupyter-owned execution semantics.
 
-### Structural notebook operations
+### P1. Pi-side execution tools
 
-- [x] Implement `notebook_insert`.
-- [x] Implement `notebook_delete`.
-- [x] Implement `notebook_move`.
-- [x] Implement `notebook_merge`.
-- [x] Implement `notebook_clear_outputs`.
-- [x] Implement `notebook_read_cell_output`.
-- [x] Implement `notebook_read_cell_attachment`.
-- [x] Simplify reads to single-cell `notebook_read_cell` with optional line slicing.
+- [ ] Add Pi-side bridge discovery/client module under `extensions/notebook/`.
+- [ ] Add `notebook_execute_all` schema + runner.
+- [ ] Add `notebook_execute_cell` schema + runner.
+- [ ] Register execution tools in `extensions/notebook/index.ts`.
+- [ ] Normalize paths at adapter seam before bridge calls.
+- [ ] Wrap execution calls in `withFileMutationQueue(path, ...)` because execution may save/mutate `.ipynb`.
+- [ ] Add prompt snippets/guidelines describing VSCode bridge requirement and `saveAfter` behavior.
 
-### Verification
+### P2. VSCode bridge package
 
-- [x] Add tests for parse/read/write/edit operations.
-- [x] Add real `.ipynb` fixture coverage.
-- [x] Add tests for remaining mutation operations.
-- [x] Split tests by layer/tool/workflow.
-- [x] Keep `bun test` green after TS/Biome tightening.
-- [ ] Verify current tools on real notebooks through Pi / local runner.
+- [ ] Create `vscode-bridge/` package scaffold.
+- [ ] Implement VSCode activation/deactivation.
+- [ ] Implement local RPC server and token auth.
+- [ ] Write/remove connection file on activate/deactivate.
+- [ ] Implement `NotebookHost` adapter using VSCode Notebook APIs.
+- [ ] Implement `health` and `listOpenNotebooks`.
+- [ ] Implement `executeAll`.
+- [ ] Implement `executeCell` by index.
+- [ ] Implement `executeCell` by cell id if VSCode exposes stable ipynb cell ids; otherwise document limitations.
+- [ ] Implement optional save-after-execution.
+
+### P3. Tests
+
+- [ ] Add shared protocol unit tests.
+- [ ] Add Pi bridge-client mock-server tests.
+- [ ] Add Pi runner tests for missing bridge file, auth/server failure, notebook-not-open, success response.
+- [ ] Add VSCode bridge handler tests with fake `NotebookHost`.
+- [ ] Add VSCode activation/server smoke test via `@vscode/test-electron`.
+- [ ] Document manual VSCode+Jupyter smoke test.
+- [ ] Keep `bun test` and `bun run check` green for existing package.
+
+### P4. Docs/package polish
+
+- [ ] Update `CODE.md` once bridge files exist.
+- [ ] Document installation/development flow for the VSCode companion extension.
+- [ ] Document execution semantics and limitations.
+- [ ] Decide whether root package scripts should proxy VSCode bridge build/test scripts.
+- [ ] Decide later whether a monorepo/package-workspace restructure is worth it.
+
+## Non-goals for the first execution pass
+
+- [ ] Do not implement persistent Jupyter kernel sessions inside Pi.
+- [ ] Do not implement a generic VSCode API bridge.
+- [ ] Do not replace existing disk-based notebook read/write tools.
+- [ ] Do not automate full VSCode+Jupyter kernel execution tests until the bridge semantics stabilize.

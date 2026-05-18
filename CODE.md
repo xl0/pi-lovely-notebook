@@ -85,6 +85,6 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
 - Save/mutation path still normalizes notebook JSON shape/format on write, even though it now aims to match common Jupyter formatting.
 - Mutation tools on no-id notebooks now rely on index selectors until ids are persisted; read-only id-based addressing is intentionally unavailable in that state.
 - Real notebook fixtures live in `test/fixtures/`.
-- `PLAN.md` now holds the main actionable planning. `IMPROVEMENTS-PLAN.md` remains as a fuller improvement note covering rationale and execution detail.
+- `PLAN.md` now holds the main actionable planning for adding VSCode/Jupyter-backed notebook execution through a same-repo companion bridge extension.
 - Path normalization, mutation queueing, and mutation orchestration helper all implemented.
 - `readCellsById` and `readCellRange` removed from public interface.
