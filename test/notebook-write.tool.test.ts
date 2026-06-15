@@ -28,9 +28,9 @@ test("runNotebookWriteCell persists ids and writes by index on notebooks without
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
-		const writeResult = await runNotebookWriteCell({ path: fixture.path, index: 0, source: "# %matplotlib widget\n" })
+		const writeResult = await runNotebookWriteCell({ path: fixture.path, index: 1, source: "# %matplotlib widget\n" })
 		expect(writeResult.content[0]?.text).toMatch(
-			new RegExp(`^Wrote cell index 0 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 0=[0-9a-f]{8} 1=[0-9a-f]{8}$`)
+			new RegExp(`^Wrote cell index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`)
 		)
 		const saved = await loadNotebook(fixture.path)
 		expect(saved.nbformat_minor).toBe(5)
@@ -38,7 +38,7 @@ test("runNotebookWriteCell persists ids and writes by index on notebooks without
 		expect(saved.cells[1]?.id).toMatch(/^[0-9a-f]{8}$/)
 		expect(Array.isArray(saved.cells[0]?.source)).toBe(true)
 
-		const result = await runNotebookReadCell({ path: fixture.path, index: 0 })
+		const result = await runNotebookReadCell({ path: fixture.path, index: 1 })
 		expect(result.content[0]?.text).toBe("# %matplotlib widget\n")
 	} finally {
 		await fixture.cleanup()

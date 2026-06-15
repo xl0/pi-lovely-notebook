@@ -33,7 +33,7 @@ describe("notebook core", () => {
 		expect(summary.kernelName).toBe("python3")
 		expect(summary.language).toBe("python")
 		expect(summary.cells[0]).toEqual({
-			index: 0,
+			index: 1,
 			id: "intro",
 			type: "markdown",
 			sourceLines: 3,
@@ -45,7 +45,7 @@ describe("notebook core", () => {
 		expect(summary.cells[1]?.outputCount).toBe(1)
 		expect(summary.cells[1]?.outputs).toEqual([
 			{
-				index: 0,
+				index: 1,
 				type: "stream",
 				preview: "",
 				previewLines: 0,
@@ -137,7 +137,7 @@ describe("notebook core", () => {
 	test("insertCell inserts a code cell after an anchor and initializes code fields", () => {
 		const notebook = parseNotebook(createNotebookText())
 		const inserted = insertCell(notebook, { cellId: "intro", direction: "after" }, { type: "code", source: "print(3)\n" })
-		expect(inserted.index).toBe(1)
+		expect(inserted.index).toBe(2)
 		expect(inserted.type).toBe("code")
 		expect(inserted.source).toBe("print(3)\n")
 		expect(inserted.id).toBeTruthy()
@@ -149,8 +149,8 @@ describe("notebook core", () => {
 		const notebook = parseNotebook(createNotebookText())
 		const inserted = insertCell(notebook, { index: 1, direction: "before" }, { type: "markdown", source: "note\n" })
 		expect(inserted.index).toBe(1)
-		expect(readAllCells(notebook)[1]?.source).toBe("note\n")
-		expect(() => insertCell(notebook, { cellId: "intro", index: 0, direction: "after" }, { type: "raw", source: "x" })).toThrow(
+		expect(readAllCells(notebook)[0]?.source).toBe("note\n")
+		expect(() => insertCell(notebook, { cellId: "intro", index: 1, direction: "after" }, { type: "raw", source: "x" })).toThrow(
 			"Provide exactly one of cellId or index"
 		)
 		expect(() => insertCell(notebook, { index: 99, direction: "after" }, { type: "raw", source: "x" })).toThrow(
@@ -170,7 +170,7 @@ describe("notebook core", () => {
 	test("moveCell reorders one cell relative to another cell", () => {
 		const notebook = parseNotebook(createNotebookText())
 		const moved = moveCell(notebook, "code-1", "intro", "before")
-		expect(moved.index).toBe(0)
+		expect(moved.index).toBe(1)
 		expect(moved.id).toBe("code-1")
 		expect(readAllCells(notebook).map(cell => cell.id)).toEqual(["code-1", "intro"])
 		expect(() => moveCell(notebook, "code-1", "code-1", "before")).toThrow("Cannot move a cell relative to itself")
@@ -214,9 +214,9 @@ describe("notebook core", () => {
 		const summary = summarizeNotebook("demo.ipynb", parseNotebook(createNotebookText()))
 		const formatted = formatNotebookSummary(summary)
 		expect(formatted).toContain("meta nbformat=4.5 kernel=python3 cells=2 language=python")
-		expect(formatted).toContain('<cell index="0" id="intro" type="md" lines="3" />\n# Title\nMore text\n')
-		expect(formatted).toContain('<cell index="1" id="code-1" type="code" lines="3" n_exec="7" outputs="1" />')
-		expect(formatted).toContain('<output cell_id="code-1" index="0" type="stream" />')
+		expect(formatted).toContain('<cell index="1" id="intro" type="md" lines="3" />\n# Title\nMore text\n')
+		expect(formatted).toContain('<cell index="2" id="code-1" type="code" lines="3" n_exec="7" outputs="1" />')
+		expect(formatted).toContain('<output cell_id="code-1" index="1" type="stream" />')
 	})
 
 	test("summary handles missing metadata and missing source", () => {
@@ -236,7 +236,7 @@ describe("notebook core", () => {
 			cellCount: 1,
 			cells: [
 				{
-					index: 0,
+					index: 1,
 					id: "a",
 					type: "markdown",
 					sourceLines: 0,
@@ -289,12 +289,12 @@ describe("notebook core", () => {
 			})
 		)
 		const formatted = formatNotebookSummary(summarizeNotebook("demo.ipynb", notebook))
-		expect(formatted).toContain('<output cell_id="c" index="0" type="stream" name="stdout" />\na\nb\nc\nd\ne\n[1 more lines]')
-		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="text/plain" n_exec="3" />\n42\n')
-		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="text/html" n_exec="3" />\n<b>42</b>')
-		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="image/png" n_exec="3" />')
+		expect(formatted).toContain('<output cell_id="c" index="1" type="stream" name="stdout" />\na\nb\nc\nd\ne\n[1 more lines]')
+		expect(formatted).toContain('<output cell_id="c" index="2" type="execute_result" mime="text/plain" n_exec="3" />\n42\n')
+		expect(formatted).toContain('<output cell_id="c" index="2" type="execute_result" mime="text/html" n_exec="3" />\n<b>42</b>')
+		expect(formatted).toContain('<output cell_id="c" index="2" type="execute_result" mime="image/png" n_exec="3" />')
 		expect(formatted).not.toContain('mime="image/png" n_exec="3" />\nAAAA')
-		expect(formatted).toContain('<output cell_id="c" index="2" type="error" ename="ValueError" />\ntb1\ntb2\n')
+		expect(formatted).toContain('<output cell_id="c" index="3" type="error" ename="ValueError" />\ntb1\ntb2\n')
 	})
 
 	test("saveNotebook writes deterministic json with trailing newline", async () => {
@@ -350,7 +350,7 @@ describe("notebook core", () => {
 	test("summary omits null execution counts from formatted rows", async () => {
 		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-history.ipynb"))
 		const formatted = formatNotebookSummary(summarizeNotebook("lovely-history.ipynb", notebook))
-		expect(formatted).toContain('<cell index="1" id="57d6942b" type="code" lines="3" outputs="0" />')
+		expect(formatted).toContain('<cell index="2" id="57d6942b" type="code" lines="3" outputs="0" />')
 		expect(formatted).not.toContain("n_exec=null")
 	})
 

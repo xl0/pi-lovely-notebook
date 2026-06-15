@@ -139,8 +139,15 @@ function storedCellId(cell: NotebookCell): string | undefined {
 
 function cellAt(notebook: Notebook, index: number): NotebookCell {
 	const cell = notebook.cells[index]
-	if (cell === undefined) throw new Error(`Cell index out of range: ${index}`)
+	if (cell === undefined) throw new Error(`Cell index out of range: ${index + 1}`)
 	return cell
+}
+
+function cellIndexFromUserIndex(notebook: Notebook, index: number): number {
+	if (!Number.isInteger(index) || index < 1 || index > notebook.cells.length) {
+		throw new Error(`Cell index out of range: ${index}`)
+	}
+	return index - 1
 }
 
 export function normalizeSource(source: NotebookCell["source"]): string {
@@ -178,7 +185,7 @@ function summarizeOutput(output: unknown, index: number): NotebookOutputSummary[
 	const raw = isObject(output) ? (output as RawOutput) : {}
 	const type = typeof raw.output_type === "string" ? raw.output_type : "unknown"
 	const base = {
-		index,
+		index: index + 1,
 		type,
 		...(typeof raw.name === "string" ? { name: raw.name } : {}),
 		...(typeof raw.ename === "string" ? { ename: raw.ename } : {}),
@@ -254,7 +261,7 @@ function readCell(cell: NotebookCell, index: number): NotebookReadCell {
 	const id = storedCellId(cell)
 	const executionCount = cell.cell_type === "code" ? ((cell.execution_count as number | null | undefined) ?? null) : undefined
 	return {
-		index,
+		index: index + 1,
 		...(id === undefined ? {} : { id }),
 		type: cell.cell_type,
 		source: normalizeSource(cell.source),
@@ -264,10 +271,7 @@ function readCell(cell: NotebookCell, index: number): NotebookReadCell {
 
 function findCellIndexBySelector(notebook: Notebook, selector: string | number): number {
 	if (typeof selector === "number") {
-		if (!Number.isInteger(selector) || selector < 0 || selector >= notebook.cells.length) {
-			throw new Error(`Cell index out of range: ${selector}`)
-		}
-		return selector
+		return cellIndexFromUserIndex(notebook, selector)
 	}
 
 	const index = notebook.cells.findIndex(cell => storedCellId(cell) === selector)
@@ -282,7 +286,7 @@ export function ensureCellIds(notebook: Notebook): PersistedCellId[] {
 		if (storedCellId(cell)) continue
 		const id = createCellId(notebook)
 		notebook.cells[index] = { ...cell, id }
-		assigned.push({ index, id })
+		assigned.push({ index: index + 1, id })
 	}
 
 	if (assigned.length > 0 && notebook.nbformat_minor < 5) {
@@ -339,7 +343,7 @@ export function summarizeNotebook(path: string, notebook: Notebook): NotebookSum
 			const attachmentKeys = isObject(cell.attachments) ? Object.keys(cell.attachments) : undefined
 			const preview = previewSource(source)
 			return {
-				index,
+				index: index + 1,
 				...(id === undefined ? {} : { id }),
 				type: cell.cell_type,
 				sourceLines: sourceLineCount(source),
@@ -473,7 +477,11 @@ export function applyExactSourceEdits(source: string, edits: NotebookSourceEdit[
 
 export function editCellSource(notebook: Notebook, cell: string | number, edits: NotebookSourceEdit[]): Notebook {
 	const index = findCellIndexBySelector(notebook, cell)
-	return writeCellSource(notebook, index, applyExactSourceEdits(readCell(cellAt(notebook, index), index).source, edits))
+	notebook.cells[index] = {
+		...cellAt(notebook, index),
+		source: applyExactSourceEdits(readCell(cellAt(notebook, index), index).source, edits)
+	}
+	return notebook
 }
 
 export function insertCell(notebook: Notebook, target: NotebookInsertTarget, cell: NotebookInsertCell): NotebookReadCell {
@@ -481,11 +489,13 @@ export function insertCell(notebook: Notebook, target: NotebookInsertTarget, cel
 		throw new Error("Provide exactly one of cellId or index")
 	}
 
-	const anchorIndex = target.cellId !== undefined ? findCellIndexById(notebook, target.cellId) : (target.index as number)
-
-	if (anchorIndex !== -1 && (!Number.isInteger(anchorIndex) || anchorIndex < 0 || anchorIndex >= notebook.cells.length)) {
-		throw new Error(`Cell index out of range: ${anchorIndex}`)
-	}
+	const targetIndex = target.index as number | undefined
+	const anchorIndex =
+		target.cellId !== undefined
+			? findCellIndexById(notebook, target.cellId)
+			: targetIndex === -1
+				? -1
+				: cellIndexFromUserIndex(notebook, targetIndex as number)
 
 	const insertIndex = anchorIndex === -1 ? notebook.cells.length : anchorIndex + (target.direction === "after" ? 1 : 0)
 	const id = createCellId(notebook)
@@ -539,7 +549,7 @@ export function mergeCell(notebook: Notebook, cell: string | number, direction: 
 	const otherIndex = anchorIndex + (direction === "above" ? -1 : 1)
 
 	if (otherIndex < 0 || otherIndex >= notebook.cells.length) {
-		throw new Error(`No cell to merge ${direction} from ${typeof cell === "string" ? cell : anchorIndex}`)
+		throw new Error(`No cell to merge ${direction} from ${typeof cell === "string" ? cell : cell}`)
 	}
 
 	const anchor = cellAt(notebook, anchorIndex)
@@ -580,15 +590,16 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 	const cellId = storedCellId(cellData)
 
 	if (cellData.cell_type !== "code") {
-		throw new Error(`Cell ${typeof cell === "string" ? cell : index} is not a code cell`)
+		throw new Error(`Cell ${typeof cell === "string" ? cell : cell} is not a code cell`)
 	}
 
 	const outputs = Array.isArray(cellData.outputs) ? cellData.outputs : []
-	if (outputIndex < 0 || outputIndex >= outputs.length) {
+	if (!Number.isInteger(outputIndex) || outputIndex < 1 || outputIndex > outputs.length) {
 		throw new Error(`Output index out of range: ${outputIndex} (cell has ${outputs.length} outputs)`)
 	}
 
-	const output = outputs[outputIndex]
+	const arrayOutputIndex = outputIndex - 1
+	const output = outputs[arrayOutputIndex]
 	if (!isObject(output)) {
 		throw new Error(`Output ${outputIndex} is not an object`)
 	}
@@ -598,7 +609,7 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 
 	if (outputType === "stream") {
 		return {
-			cellIndex: index,
+			cellIndex: index + 1,
 			...(cellId === undefined ? {} : { cellId }),
 			outputIndex,
 			outputType,
@@ -610,7 +621,7 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 	if (outputType === "error") {
 		const traceback = Array.isArray(raw.traceback) ? raw.traceback.filter((line): line is string => typeof line === "string") : []
 		return {
-			cellIndex: index,
+			cellIndex: index + 1,
 			...(cellId === undefined ? {} : { cellId }),
 			outputIndex,
 			outputType,
@@ -647,7 +658,7 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 				throw new Error(`Output ${outputIndex} has no displayable content`)
 			}
 			return {
-				cellIndex: index,
+				cellIndex: index + 1,
 				...(cellId === undefined ? {} : { cellId }),
 				outputIndex,
 				outputType,
@@ -667,7 +678,7 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 		if (isImage) {
 			const data = typeof value === "string" ? value : Array.isArray(value) ? value.join("") : ""
 			return {
-				cellIndex: index,
+				cellIndex: index + 1,
 				...(cellId === undefined ? {} : { cellId }),
 				outputIndex,
 				outputType,
@@ -677,7 +688,7 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 		}
 
 		return {
-			cellIndex: index,
+			cellIndex: index + 1,
 			...(cellId === undefined ? {} : { cellId }),
 			outputIndex,
 			outputType,
@@ -706,7 +717,7 @@ export function readCellAttachment(notebook: Notebook, cell: string | number, ke
 
 	const attachments = cellData.attachments
 	if (!isObject(attachments) || !(key in attachments)) {
-		throw new Error(`Attachment "${key}" not found in cell ${typeof cell === "string" ? cell : index}`)
+		throw new Error(`Attachment "${key}" not found in cell ${typeof cell === "string" ? cell : cell}`)
 	}
 
 	const attachment = attachments[key]
@@ -730,7 +741,7 @@ export function readCellAttachment(notebook: Notebook, cell: string | number, ke
 export function clearCellOutputs(notebook: Notebook, cell: string | number): NotebookReadCell {
 	const index = findCellIndexBySelector(notebook, cell)
 	const current = cellAt(notebook, index)
-	if (current.cell_type !== "code") throw new Error(`Cell is not code: ${typeof cell === "string" ? cell : index}`)
+	if (current.cell_type !== "code") throw new Error(`Cell is not code: ${typeof cell === "string" ? cell : cell}`)
 	notebook.cells[index] = { ...current, outputs: [] }
 	return readCell(cellAt(notebook, index), index)
 }

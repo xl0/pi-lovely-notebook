@@ -29,7 +29,7 @@ export const notebookSummaryParams = Type.Object({
 export const notebookReadCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to read." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index to read." })),
+	index: Type.Optional(Type.Integer({ description: "1-based cell index to read." })),
 	lineOffset: Type.Optional(Type.Integer({ description: "Inclusive source line offset within the cell." })),
 	lineLimit: Type.Optional(Type.Integer({ description: "Maximum number of source lines to read from the offset." }))
 })
@@ -37,14 +37,14 @@ export const notebookReadCellParams = Type.Object({
 export const notebookWriteCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to replace." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index to replace." })),
+	index: Type.Optional(Type.Integer({ description: "1-based cell index to replace." })),
 	source: Type.String({ description: "New full cell source." })
 })
 
 export const notebookEditCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to edit." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index to edit." })),
+	index: Type.Optional(Type.Integer({ description: "1-based cell index to edit." })),
 	edits: Type.Array(
 		Type.Object({
 			oldText: Type.String({ description: "Exact text to replace." }),
@@ -57,7 +57,7 @@ export const notebookEditCellParams = Type.Object({
 export const notebookInsertParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Anchor cell id." })),
-	index: Type.Optional(Type.Integer({ description: "Anchor cell index. Use -1 to append." })),
+	index: Type.Optional(Type.Integer({ description: "1-based anchor cell index. Use -1 to append." })),
 	direction: StringEnum(["before", "after"] as const, { description: "Insert before or after the anchor." }),
 	type: StringEnum(["code", "markdown", "raw"] as const, { description: "New cell type." }),
 	source: Type.String({ description: "Source for the new cell." })
@@ -66,15 +66,15 @@ export const notebookInsertParams = Type.Object({
 export const notebookDeleteParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to delete." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index to delete." }))
+	index: Type.Optional(Type.Integer({ description: "1-based cell index to delete." }))
 })
 
 export const notebookMoveParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to move." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index to move." })),
+	index: Type.Optional(Type.Integer({ description: "1-based cell index to move." })),
 	targetCellId: Type.Optional(Type.String({ description: "Anchor cell id to move relative to." })),
-	targetIndex: Type.Optional(Type.Integer({ description: "Anchor cell index to move relative to. Use -1 for the end." })),
+	targetIndex: Type.Optional(Type.Integer({ description: "1-based anchor cell index to move relative to. Use -1 for the end." })),
 	direction: StringEnum(["before", "after"] as const, {
 		description: "Place the moved cell before or after the target."
 	})
@@ -83,28 +83,28 @@ export const notebookMoveParams = Type.Object({
 export const notebookMergeParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Anchor cell id to keep." })),
-	index: Type.Optional(Type.Integer({ description: "Anchor cell index to keep." })),
+	index: Type.Optional(Type.Integer({ description: "1-based anchor cell index to keep." })),
 	direction: StringEnum(["above", "below"] as const, { description: "Adjacent merge direction." })
 })
 
 export const notebookClearOutputsParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Code cell id whose outputs should be cleared." })),
-	index: Type.Optional(Type.Integer({ description: "Code cell index whose outputs should be cleared." }))
+	index: Type.Optional(Type.Integer({ description: "1-based code cell index whose outputs should be cleared." }))
 })
 
 export const notebookReadCellAttachmentParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index." })),
+	index: Type.Optional(Type.Integer({ description: "1-based cell index." })),
 	key: Type.String({ description: "Attachment key (filename)." })
 })
 
 export const notebookReadOutputParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to read output from." })),
-	index: Type.Optional(Type.Integer({ description: "Cell index to read output from." })),
-	outputIndex: Type.Integer({ description: "Index of the output within the cell (0-based)." }),
+	index: Type.Optional(Type.Integer({ description: "1-based cell index to read output from." })),
+	outputIndex: Type.Integer({ description: "1-based index of the output within the cell." }),
 	mime: Type.Optional(
 		Type.String({
 			description:
@@ -143,6 +143,11 @@ function selectorText(selector: string | number): string {
 	return typeof selector === "string" ? selector : `index ${selector}`
 }
 
+function userIndexToArrayIndex(notebook: Awaited<ReturnType<typeof loadNotebook>>, index: number): number {
+	if (!Number.isInteger(index) || index < 1 || index > notebook.cells.length) throw new Error(`Cell index out of range: ${index}`)
+	return index - 1
+}
+
 async function mutateNotebook<T>(path: string, mutate: (notebook: Notebook) => T): Promise<{ assigned: PersistedCellId[]; result: T }> {
 	const notebook = await loadNotebook(path)
 	const assigned = ensureCellIds(notebook)
@@ -159,7 +164,7 @@ function requireSingleCellSelector(cellId?: string, index?: number): string | nu
 }
 
 function requireReadCellAtIndex(notebook: Awaited<ReturnType<typeof loadNotebook>>, index: number) {
-	const cell = readAllCells(notebook)[index]
+	const cell = readAllCells(notebook)[userIndexToArrayIndex(notebook, index)]
 	if (cell === undefined) throw new Error(`Cell index out of range: ${index}`)
 	return cell
 }

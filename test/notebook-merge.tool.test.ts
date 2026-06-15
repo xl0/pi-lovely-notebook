@@ -19,13 +19,13 @@ test("runNotebookMerge works by index on notebooks without ids", async () => {
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
-		const result = await runNotebookMerge({ path: fixture.path, index: 0, direction: "below" })
+		const result = await runNotebookMerge({ path: fixture.path, index: 1, direction: "below" })
 		expect(result.content[0]?.text).toMatch(
 			new RegExp(
-				`^Merged cell [0-9a-f]{8} into index 0 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 0=[0-9a-f]{8} 1=[0-9a-f]{8}$`
+				`^Merged cell [0-9a-f]{8} into index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`
 			)
 		)
-		const readResult = await runNotebookReadCell({ path: fixture.path, index: 0 })
+		const readResult = await runNotebookReadCell({ path: fixture.path, index: 1 })
 		expect(readResult.content[0]?.text).toContain("# %matplotlib inline\n#!/usr/bin/env python3")
 	} finally {
 		await fixture.cleanup()

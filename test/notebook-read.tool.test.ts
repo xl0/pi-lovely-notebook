@@ -11,7 +11,7 @@ test("runNotebookReadCell returns raw cell source", async () => {
 test("runNotebookReadCell supports reading by index and line slice", async () => {
 	const result = await runNotebookReadCell({
 		path: join(FIXTURE_DIR, "lovely-history.ipynb"),
-		index: 4,
+		index: 5,
 		lineOffset: 1,
 		lineLimit: 1
 	})
@@ -23,7 +23,7 @@ test("runNotebookReadCell rejects invalid selectors", async () => {
 		runNotebookReadCell({
 			path: join(FIXTURE_DIR, "lovely-history.ipynb"),
 			cellId: "95cca932",
-			index: 4
+			index: 5
 		})
 	).rejects.toThrow("Provide exactly one cell selector: cellId or index")
 })
@@ -35,10 +35,10 @@ test("runNotebookReadCell fails on missing cell id", async () => {
 })
 
 test("runNotebookReadCell rejects invalid line slices", async () => {
-	await expect(runNotebookReadCell({ path: join(FIXTURE_DIR, "lovely-history.ipynb"), index: 4, lineOffset: -1 })).rejects.toThrow(
+	await expect(runNotebookReadCell({ path: join(FIXTURE_DIR, "lovely-history.ipynb"), index: 5, lineOffset: -1 })).rejects.toThrow(
 		"Invalid lineOffset: -1"
 	)
-	await expect(runNotebookReadCell({ path: join(FIXTURE_DIR, "lovely-history.ipynb"), index: 4, lineLimit: -1 })).rejects.toThrow(
+	await expect(runNotebookReadCell({ path: join(FIXTURE_DIR, "lovely-history.ipynb"), index: 5, lineLimit: -1 })).rejects.toThrow(
 		"Invalid lineLimit: -1"
 	)
 })

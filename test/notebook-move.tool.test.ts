@@ -20,13 +20,13 @@ test("runNotebookMove works by index on notebooks without ids", async () => {
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
-		const result = await runNotebookMove({ path: fixture.path, index: 1, targetIndex: 0, direction: "before" })
+		const result = await runNotebookMove({ path: fixture.path, index: 2, targetIndex: 1, direction: "before" })
 		expect(result.content[0]?.text).toMatch(
 			new RegExp(
-				`^Moved cell index 1 before index 0 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 0=[0-9a-f]{8} 1=[0-9a-f]{8}$`
+				`^Moved cell index 2 before index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`
 			)
 		)
-		const readResult = await runNotebookReadCell({ path: fixture.path, index: 0 })
+		const readResult = await runNotebookReadCell({ path: fixture.path, index: 1 })
 		expect(readResult.content[0]?.text).toContain("#!/usr/bin/env python3")
 	} finally {
 		await fixture.cleanup()

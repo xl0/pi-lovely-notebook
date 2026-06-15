@@ -36,7 +36,7 @@ function normalizeNotebookPath(rawPath: string, cwd: string): string {
 export default function notebookExtension(pi: ExtensionAPI) {
 	const notebookToolGuidelines = [
 		"Notebook tools: use notebook_summary first to discover structure and cell ids.",
-		"Notebook tools: for notebooks without stored cell ids, use index selectors.",
+		"Notebook tools: cell index selectors are 1-based; for notebooks without stored cell ids, use index selectors.",
 		"notebook_edit_cell: replacements must match exactly and uniquely.",
 		"notebook_insert: index -1 appends.",
 		"notebook_move: targetIndex -1 means the end.",
