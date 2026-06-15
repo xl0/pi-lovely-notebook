@@ -30,7 +30,7 @@ test("runNotebookInsert works by index on notebooks without ids", async () => {
 	try {
 		const result = await runNotebookInsert({
 			path: fixture.path,
-			index: 0,
+			index: 1,
 			direction: "after",
 			type: "code",
 			source: "print(123)\n"
@@ -38,7 +38,7 @@ test("runNotebookInsert works by index on notebooks without ids", async () => {
 		const inserted = result.details as { id: string }
 		expect(result.content[0]?.text).toMatch(
 			new RegExp(
-				`^Inserted cell ${inserted.id} after index 0 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 0=[0-9a-f]{8} 1=[0-9a-f]{8}$`
+				`^Inserted cell ${inserted.id} after index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`
 			)
 		)
 		expect(readCellById(await loadNotebook(fixture.path), inserted.id).source).toBe("print(123)\n")
@@ -55,7 +55,7 @@ test("runNotebookInsert fails on ambiguous selector", async () => {
 			runNotebookInsert({
 				path: fixture.path,
 				cellId: "95cca932",
-				index: 4,
+				index: 5,
 				direction: "after",
 				type: "markdown",
 				source: "x"

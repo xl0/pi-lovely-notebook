@@ -37,18 +37,18 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - summary/read omit `id` when the notebook cell has no stored id
   - code cell summary headers include `n_exec` only when execution count is present
   - summary preview is raw source text after each cell header, hard-limited to 5 lines; when truncated, it ends with a final `[N more lines]` line
-  - summary now includes per-output pseudo-XML headers after each cell preview; output headers include `cell_id` when present, else `cell_index`, rich outputs are flattened to one header per MIME variant, and only text-like variants include up to 5 preview lines
-  - read one cell by id or index, optionally slicing source by line offset/limit; truncated reads append `[N more lines. Use offset=M to continue.]`
+  - summary now includes per-output pseudo-XML headers after each cell preview; output headers include `cell_id` when present, else `cell_index`, use 1-based output indices, rich outputs are flattened to one header per MIME variant, and only text-like variants include up to 5 preview lines
+  - read one cell by id or 1-based index, optionally slicing source by line offset/limit; truncated reads append `[N more lines. Use offset=M to continue.]`
   - read tool text output is raw cell source only; cell metadata stays in tool `details` and in `notebook_summary`
   - source mutation tools are explicitly cell-scoped by name: `notebook_read_cell`, `notebook_write_cell`, `notebook_edit_cell`
-  - mutation tools accept id selectors for notebooks that already have ids, and index selectors for notebooks that do not
-  - first mutation on a no-id notebook assigns short random 8-hex ids to all cells, bumps `nbformat_minor` to `5` when needed, and appends a concise index→id mapping to tool output
+  - mutation tools accept id selectors for notebooks that already have ids, and 1-based index selectors for notebooks that do not
+  - first mutation on a no-id notebook assigns short random 8-hex ids to all cells, bumps `nbformat_minor` to `5` when needed, and appends a concise 1-based index→id mapping to tool output
   - write/edit preserve other cell fields like metadata/outputs and return concise confirmation text
-  - insert one code/markdown/raw cell before or after an anchor cell id or index; `index=-1` appends
-  - move one cell before or after another cell by id or index
+  - insert one code/markdown/raw cell before or after an anchor cell id or 1-based index; `index=-1` appends
+  - move one cell before or after another cell by id or 1-based index
   - merge one cell with the adjacent same-type cell `above` or `below`, preserving the anchor id and inserting one boundary newline when needed
   - clear outputs from one code cell while preserving source and execution count
-  - read one output by index from a code cell; returns text for text-like mimes, image for binary image mimes (image/png, image/jpeg, etc.); image/svg+xml is returned as text; rich outputs with multiple mime types require the `mime` parameter
+  - read one output by 1-based index from a code cell; returns text for text-like mimes, image for binary image mimes (image/png, image/jpeg, etc.); image/svg+xml is returned as text; rich outputs with multiple mime types require the `mime` parameter
   - read one image attachment from a cell by key; returns image content
   - `notebook_read_cell` on markdown cells extracts `data:` URI images: replaces them with `[image: mime/type]` markers in text and returns decoded images as `ImageContent` items
   - `notebook_summary` lists attachment keys in cell headers via `atts="key1 key2"` attribute

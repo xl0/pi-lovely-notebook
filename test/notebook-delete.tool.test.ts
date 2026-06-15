@@ -18,11 +18,11 @@ test("runNotebookDelete works by index on notebooks without ids", async () => {
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
-		const result = await runNotebookDelete({ path: fixture.path, index: 0 })
+		const result = await runNotebookDelete({ path: fixture.path, index: 1 })
 		expect(result.content[0]?.text).toMatch(
-			new RegExp(`^Deleted cell index 0 from ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 0=[0-9a-f]{8} 1=[0-9a-f]{8}$`)
+			new RegExp(`^Deleted cell index 1 from ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`)
 		)
-		await expect(runNotebookReadCell({ path: fixture.path, index: 0 })).resolves.toMatchObject({
+		await expect(runNotebookReadCell({ path: fixture.path, index: 1 })).resolves.toMatchObject({
 			content: [{ type: "text", text: expect.any(String) }]
 		})
 	} finally {
