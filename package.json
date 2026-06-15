@@ -1,9 +1,14 @@
 {
-	"name": "pi-agent-notebook-extension",
+	"name": "pi-lovely-notebooks",
 	"version": "0.1.0",
 	"private": true,
 	"keywords": [
-		"pi-package"
+		"pi-package",
+		"jupyter",
+		"python",
+		"jupyter notebook",
+		"vscode",
+		"visual studio code"
 	],
 	"type": "module",
 	"scripts": {
