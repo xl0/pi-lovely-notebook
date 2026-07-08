@@ -13,7 +13,9 @@ test("runNotebookEditCell works by index on notebooks without ids", async () => 
 			edits: [{ oldText: "import numpy as np", newText: "import numpy as numpy" }]
 		})
 		expect(result.content[0]?.text).toContain(`Successfully replaced 1 block(s) in cell index 2 of ${fixture.path}.`)
-		expect(result.content[0]?.text).toMatch(/Assigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$/)
+		const saved = await loadNotebook(fixture.path)
+		expect(saved.cells[0]?.id).toBeUndefined()
+		expect(saved.cells[1]?.id).toBeUndefined()
 		expect(readAllCells(await loadNotebook(fixture.path))[1]?.source).toContain("import numpy as numpy")
 	} finally {
 		await fixture.cleanup()

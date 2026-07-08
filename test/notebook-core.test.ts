@@ -7,7 +7,6 @@ import {
 	clearCellOutputs,
 	deleteCell,
 	editCellSource,
-	ensureCellIds,
 	formatNotebookSummary,
 	insertCell,
 	loadNotebook,
@@ -360,16 +359,6 @@ describe("notebook core", () => {
 		const preview = summary.cells[7]?.preview ?? ""
 		const start = preview.indexOf("deleted it.")
 		expect(preview.slice(start, start + 11)).toBe("deleted it.")
-	})
-
-	test("ensureCellIds assigns short random ids and bumps minor version", async () => {
-		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-test-no-ids.ipynb"))
-		const assigned = ensureCellIds(notebook)
-
-		expect(notebook.nbformat_minor).toBe(5)
-		expect(assigned).toHaveLength(2)
-		expect(notebook.cells[0]?.id).toMatch(/^[0-9a-f]{8}$/)
-		expect(notebook.cells[1]?.id).toMatch(/^[0-9a-f]{8}$/)
 	})
 
 	test("real fixture without ids omits ids from summary and read", async () => {

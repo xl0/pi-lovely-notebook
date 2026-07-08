@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { loadNotebook } from "../extensions/notebook/notebook"
 import { runNotebookMove, runNotebookReadCell } from "../extensions/notebook/tools"
-import { copyFixture, escapeForRegex } from "./helpers"
+import { copyFixture } from "./helpers"
 
 test("runNotebookMove returns concise confirmation and reorders cells", async () => {
 	const fixture = await copyFixture("lovely-history.ipynb")
@@ -21,11 +21,7 @@ test("runNotebookMove works by index on notebooks without ids", async () => {
 
 	try {
 		const result = await runNotebookMove({ path: fixture.path, index: 2, targetIndex: 1, direction: "before" })
-		expect(result.content[0]?.text).toMatch(
-			new RegExp(
-				`^Moved cell index 2 before index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`
-			)
-		)
+		expect(result.content[0]?.text).toBe(`Moved cell index 2 before index 1 in ${fixture.path}.`)
 		const readResult = await runNotebookReadCell({ path: fixture.path, index: 1 })
 		expect(readResult.content[0]?.text).toContain("#!/usr/bin/env python3")
 	} finally {

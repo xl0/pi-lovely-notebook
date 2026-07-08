@@ -53,7 +53,3 @@ export function createNotebookText() {
 		]
 	})
 }
-
-export function escapeForRegex(text: string) {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}

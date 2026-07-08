@@ -1,12 +1,11 @@
 import { StringEnum } from "@earendil-works/pi-ai"
 import { resizeImage } from "@earendil-works/pi-coding-agent"
 import { type Static, Type } from "typebox"
-import type { Notebook, PersistedCellId } from "./notebook"
+import type { Notebook } from "./notebook"
 import {
 	clearCellOutputs,
 	deleteCell,
 	editCellSource,
-	ensureCellIds,
 	extractDataUriImages,
 	formatNotebookSummary,
 	insertCell,
@@ -109,7 +108,7 @@ export const notebookReadOutputParams = Type.Object({
 	mime: Type.Optional(
 		Type.String({
 			description:
-				"Mime type to select. Required for rich outputs (display_data/execute_result) with multiple variants. E.g. 'text/plain', 'image/png', 'image/svg+xml'."
+				"Mime type to select from rich outputs (display_data/execute_result). If omitted, all displayable text and image variants are returned. E.g. 'text/plain', 'image/png', 'image/svg+xml'."
 		})
 	),
 	lineOffset: Type.Optional(Type.Integer({ description: "Inclusive line offset within the text output." })),
@@ -144,26 +143,20 @@ async function pushImageContent(content: NotebookToolResult["content"], image: {
 	content.push({ type: "image", data: resized.data, mimeType: resized.mimeType })
 }
 
-function formatAssignedIds(notebookPath: string, assigned: PersistedCellId[]): string {
-	if (assigned.length === 0) return ""
-	return `\nAssigned ids in ${notebookPath}: ${assigned.map(({ index, id }) => `${index}=${id}`).join(" ")}`
-}
-
 function selectorText(selector: string | number): string {
 	return typeof selector === "string" ? selector : `index ${selector}`
 }
 
-function userIndexToArrayIndex(notebook: Awaited<ReturnType<typeof loadNotebook>>, index: number): number {
+function userIndexToArrayIndex(notebook: Notebook, index: number): number {
 	if (!Number.isInteger(index) || index < 1 || index > notebook.cells.length) throw new Error(`Cell index out of range: ${index}`)
 	return index - 1
 }
 
-async function mutateNotebook<T>(path: string, mutate: (notebook: Notebook) => T): Promise<{ assigned: PersistedCellId[]; result: T }> {
+async function mutateNotebook<T>(path: string, mutate: (notebook: Notebook) => T): Promise<T> {
 	const notebook = await loadNotebook(path)
-	const assigned = ensureCellIds(notebook)
 	const result = mutate(notebook)
 	await saveNotebook(path, notebook)
-	return { assigned, result }
+	return result
 }
 
 function requireSingleCellSelector(cellId?: string, index?: number): string | number {
@@ -173,7 +166,7 @@ function requireSingleCellSelector(cellId?: string, index?: number): string | nu
 	return cellId ?? (index as number)
 }
 
-function requireReadCellAtIndex(notebook: Awaited<ReturnType<typeof loadNotebook>>, index: number) {
+function requireReadCellAtIndex(notebook: Notebook, index: number) {
 	const cell = readAllCells(notebook)[userIndexToArrayIndex(notebook, index)]
 	if (cell === undefined) throw new Error(`Cell index out of range: ${index}`)
 	return cell
@@ -211,19 +204,19 @@ export async function runNotebookReadCell(params: NotebookReadCellParams): Promi
 
 export async function runNotebookWriteCell(params: NotebookWriteCellParams): Promise<NotebookToolResult> {
 	const selector = requireSingleCellSelector(params.cellId, params.index)
-	const { assigned, result } = await mutateNotebook(params.path, notebook => {
+	const result = await mutateNotebook(params.path, notebook => {
 		writeCellSource(notebook, selector, params.source)
 		return typeof selector === "string" ? readCellById(notebook, selector) : requireReadCellAtIndex(notebook, selector)
 	})
 	return {
-		content: [{ type: "text", text: `Wrote cell ${selectorText(selector)} in ${params.path}.${formatAssignedIds(params.path, assigned)}` }],
+		content: [{ type: "text", text: `Wrote cell ${selectorText(selector)} in ${params.path}.` }],
 		details: result
 	}
 }
 
 export async function runNotebookEditCell(params: NotebookEditCellParams): Promise<NotebookToolResult> {
 	const selector = requireSingleCellSelector(params.cellId, params.index)
-	const { assigned, result } = await mutateNotebook(params.path, notebook => {
+	const result = await mutateNotebook(params.path, notebook => {
 		editCellSource(notebook, selector, params.edits)
 		return typeof selector === "string" ? readCellById(notebook, selector) : requireReadCellAtIndex(notebook, selector)
 	})
@@ -231,7 +224,7 @@ export async function runNotebookEditCell(params: NotebookEditCellParams): Promi
 		content: [
 			{
 				type: "text",
-				text: `Successfully replaced ${params.edits.length} block(s) in cell ${selectorText(selector)} of ${params.path}.${formatAssignedIds(params.path, assigned)}`
+				text: `Successfully replaced ${params.edits.length} block(s) in cell ${selectorText(selector)} of ${params.path}.`
 			}
 		],
 		details: result
@@ -239,7 +232,7 @@ export async function runNotebookEditCell(params: NotebookEditCellParams): Promi
 }
 
 export async function runNotebookInsert(params: NotebookInsertParams): Promise<NotebookToolResult> {
-	const { assigned, result } = await mutateNotebook(params.path, notebook =>
+	const result = await mutateNotebook(params.path, notebook =>
 		insertCell(
 			notebook,
 			{
@@ -256,7 +249,7 @@ export async function runNotebookInsert(params: NotebookInsertParams): Promise<N
 		content: [
 			{
 				type: "text",
-				text: `Inserted cell ${result.id} ${placement} ${anchor} in ${params.path}.${formatAssignedIds(params.path, assigned)}`
+				text: `Inserted cell ${result.id ?? `index ${result.index}`} ${placement} ${anchor} in ${params.path}.`
 			}
 		],
 		details: result
@@ -265,11 +258,9 @@ export async function runNotebookInsert(params: NotebookInsertParams): Promise<N
 
 export async function runNotebookDelete(params: NotebookDeleteParams): Promise<NotebookToolResult> {
 	const selector = requireSingleCellSelector(params.cellId, params.index)
-	const { assigned, result } = await mutateNotebook(params.path, notebook => deleteCell(notebook, selector))
+	const result = await mutateNotebook(params.path, notebook => deleteCell(notebook, selector))
 	return {
-		content: [
-			{ type: "text", text: `Deleted cell ${selectorText(selector)} from ${params.path}.${formatAssignedIds(params.path, assigned)}` }
-		],
+		content: [{ type: "text", text: `Deleted cell ${selectorText(selector)} from ${params.path}.` }],
 		details: result
 	}
 }
@@ -277,13 +268,13 @@ export async function runNotebookDelete(params: NotebookDeleteParams): Promise<N
 export async function runNotebookMove(params: NotebookMoveParams): Promise<NotebookToolResult> {
 	const selector = requireSingleCellSelector(params.cellId, params.index)
 	const target = requireSingleCellSelector(params.targetCellId, params.targetIndex)
-	const { assigned, result } = await mutateNotebook(params.path, notebook => moveCell(notebook, selector, target, params.direction))
+	const result = await mutateNotebook(params.path, notebook => moveCell(notebook, selector, target, params.direction))
 	const targetText = typeof target === "string" ? target : target === -1 ? "the end" : `index ${target}`
 	return {
 		content: [
 			{
 				type: "text",
-				text: `Moved cell ${selectorText(selector)} ${params.direction} ${targetText} in ${params.path}.${formatAssignedIds(params.path, assigned)}`
+				text: `Moved cell ${selectorText(selector)} ${params.direction} ${targetText} in ${params.path}.`
 			}
 		],
 		details: result
@@ -292,12 +283,12 @@ export async function runNotebookMove(params: NotebookMoveParams): Promise<Noteb
 
 export async function runNotebookMerge(params: NotebookMergeParams): Promise<NotebookToolResult> {
 	const selector = requireSingleCellSelector(params.cellId, params.index)
-	const { assigned, result } = await mutateNotebook(params.path, notebook => mergeCell(notebook, selector, params.direction))
+	const result = await mutateNotebook(params.path, notebook => mergeCell(notebook, selector, params.direction))
 	return {
 		content: [
 			{
 				type: "text",
-				text: `Merged cell ${result.removed.id ?? `index ${result.removed.index}`} into ${selectorText(selector)} in ${params.path}.${formatAssignedIds(params.path, assigned)}`
+				text: `Merged cell ${result.removed.id ?? `index ${result.removed.index}`} into ${selectorText(selector)} in ${params.path}.`
 			}
 		],
 		details: result
@@ -343,12 +334,12 @@ export async function runNotebookReadCellAttachment(params: NotebookReadCellAtta
 
 export async function runNotebookClearOutputs(params: NotebookClearOutputsParams): Promise<NotebookToolResult> {
 	const selector = requireSingleCellSelector(params.cellId, params.index)
-	const { assigned, result } = await mutateNotebook(params.path, notebook => clearCellOutputs(notebook, selector))
+	const result = await mutateNotebook(params.path, notebook => clearCellOutputs(notebook, selector))
 	return {
 		content: [
 			{
 				type: "text",
-				text: `Cleared outputs for cell ${selectorText(selector)} in ${params.path}.${formatAssignedIds(params.path, assigned)}`
+				text: `Cleared outputs for cell ${selectorText(selector)} in ${params.path}.`
 			}
 		],
 		details: result

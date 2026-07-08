@@ -9,7 +9,7 @@ import {
 } from "../extensions/notebook/tools"
 import { copyFixture } from "./helpers"
 
-test("no-id notebook can be mutated across tools after id assignment", async () => {
+test("no-id notebook can be mutated by index without id assignment", async () => {
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
@@ -19,23 +19,22 @@ test("no-id notebook can be mutated across tools after id assignment", async () 
 			index: 2,
 			edits: [{ oldText: "import numpy as np", newText: "import numpy as numpy" }]
 		})
-		const insertResult = await runNotebookInsert({
+		await runNotebookInsert({
 			path: fixture.path,
 			index: 1,
 			direction: "after",
 			type: "markdown",
 			source: "Inserted note\n"
 		})
-		const inserted = insertResult.details as { id: string }
-		await runNotebookMove({ path: fixture.path, cellId: inserted.id, targetIndex: -1, direction: "after" })
+		await runNotebookMove({ path: fixture.path, index: 2, targetIndex: -1, direction: "after" })
 
 		const saved = await loadNotebook(fixture.path)
-		expect(saved.nbformat_minor).toBe(5)
-		expect(saved.cells.every(cell => typeof cell.id === "string")).toBe(true)
+		expect(saved.nbformat_minor).toBe(2)
+		expect(saved.cells.every(cell => cell.id === undefined)).toBe(true)
 
 		expect((await runNotebookReadCell({ path: fixture.path, index: 1 })).content[0]?.text).toContain("# %matplotlib widget")
 		expect((await runNotebookReadCell({ path: fixture.path, index: 2 })).content[0]?.text).toContain("import numpy as numpy")
-		expect(saved.cells.some(cell => cell.id === inserted.id)).toBe(true)
+		expect((await runNotebookReadCell({ path: fixture.path, index: 3 })).content[0]?.text).toBe("Inserted note\n")
 	} finally {
 		await fixture.cleanup()
 	}

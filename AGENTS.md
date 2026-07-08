@@ -3,10 +3,11 @@
 Maintain 2 important files in sync with the codebase:
 
 - `CODE.md`: An in-depth summary of the current state of the codebase.
-- `PLAN.md`: Contains technical decisions/constraints, the high-level plan, and a lower-level todo list. Use [x] boxes to mark items.
+- `PLAN.md`: Contains both high-level birds eye plan, as well as a lower-level todo list. Use [x] boxes to mark items.
 
 IMPORTANT: At the start of each conversation, always fully read `CODE.md`. You may read `PLAN.md` when relevant to the task.
 Update the files as you go, keep the updates concise. Not a changelog - content reflects the current state, not history.
+Don't put too much on one line, keep things readeable.
 
 # Guidelines
 
@@ -18,7 +19,7 @@ Update the files as you go, keep the updates concise. Not a changelog - content 
 - Keep the end of turn summaries very concise.
 - No need to git diff at the end of the turn.
 
-## Autonomy and 
+## Autonomy and persistence
 
 - If the user asks for a plan, asks a question, brainstorming, or otherwise indicates conversation, reply or otherwise solve the users problem without editing the code. Otherwise, go ahead and actually implement the change. If you encounter challenges or blockers, you should attempt to resolve them yourself.
 
@@ -44,66 +45,49 @@ Update the files as you go, keep the updates concise. Not a changelog - content 
 
 ### Git
 
+- Only commit when directly instructed. 
 - When you commit, it's possible that the worktree contains unrelated changes and untracked files. Don't blindly add files - only commit what's necessary.
 - **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.
-## Think Before Coding
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+## Communication style
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+Your Responses are terse but informative. All content, no fluff.
 
-## 2. Simplicity First
+Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging.
+Fragments OK. Short synonyms (big not extensive, fix not "implement a solution for"). Abbreviate common terms (DB/auth/config/req/res/fn/impl).
+Use arrows for causality (X -> Y). One word when one word is enough.
 
-**Minimum code that solves the problem. Nothing speculative.**
+Technical terms stay exact. Code blocks unchanged. Errors quoted exact.
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+Pattern: `[thing] [action] [reason]. [next step].`
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+Not: "Sure! I'd be happy to help you with that. The issue you're experiencing is likely caused by..."
+Yes: "Bug in auth middleware. Token expiry check use `<` not `<=`. Fix:"
 
-## 3. Surgical Changes
+# Strategic minimalism.
 
-**Touch only what you must. Clean up only your own mess.**
+**Does this need to exist at all?** Speculative need = skip it, say so in one line. (YAGNI)
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+**Bug fix = root cause, not symptom.** 
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+## Rules
 
-The test: Every changed line should trace directly to the user's request.
+- The best code is the code never written.
+- Implement the smallest solution that actually works, simplest, shortest, most minimal.
+- Question whether the task needs to exist at all (YAGNI), reach for the standard library before custom code, native platform features before dependencies, one line before fifty.
+- No unrequested abstractions: no interface with one implementation, no factory for one product, no config for a value that never changes.
+- No boilerplate, no scaffolding "for later", later can scaffold for itself.
+- Deletion over addition. Boring over clever.
+- Fewest files possible. Shortest working diff wins — but only once you understand the problem. The smallest change in the wrong place isn't minimalism, it's a second bug.
+- Complex request? Ship the simple version and question if the user wants more in the same response.
+- Two stdlib options, same size? Take the one that's correct on edge cases. Write less code, but pick robust implementations.
 
-## 4. Goal-Driven Execution
+- Read the actual flow before minimizing. Small wrong diffs are not minimalist, they are bugs.
+- Search for and reuse existing helpers/patterns in the codebase before writing new ones.
+- Never simplify away trust-boundary validation, security, accessibility, or data-loss prevention.
+- If taking a deliberate shortcut, name the ceiling and upgrade trigger in one short comment (O(n²), global lock - optimize only if becomes a bottleneck).
 
-**Define success criteria. Loop until verified.**
+Example: "Add a cache for these API responses."
+Response: "`@lru_cache(maxsize=1000)` on the fetch function. Skipped custom cache class, add when lru_cache measurably falls short."
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.## TypeScript / Node / Svelte
-- Always use bun/bunx, not npm
-- You may install packages, double-check with the user if in doubt.
-- If  project is using shadcn, prefer installing shadcn components over hand-rolled replacements.
-
-## Typescript
-- Run `bun run test` after any changes that have chance of breaking things, but not after trivial changes.
+The shortest path to done is the right path.
