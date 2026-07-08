@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { runNotebookMerge, runNotebookReadCell } from "../extensions/notebook/tools"
-import { copyFixture, escapeForRegex } from "./helpers"
+import { copyFixture } from "./helpers"
 
 test("runNotebookMerge returns concise confirmation and merged source", async () => {
 	const fixture = await copyFixture("lovely-history.ipynb")
@@ -20,11 +20,7 @@ test("runNotebookMerge works by index on notebooks without ids", async () => {
 
 	try {
 		const result = await runNotebookMerge({ path: fixture.path, index: 1, direction: "below" })
-		expect(result.content[0]?.text).toMatch(
-			new RegExp(
-				`^Merged cell [0-9a-f]{8} into index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`
-			)
-		)
+		expect(result.content[0]?.text).toBe(`Merged cell index 2 into index 1 in ${fixture.path}.`)
 		const readResult = await runNotebookReadCell({ path: fixture.path, index: 1 })
 		expect(readResult.content[0]?.text).toContain("# %matplotlib inline\n#!/usr/bin/env python3")
 	} finally {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { loadNotebook, readCellById } from "../extensions/notebook/notebook"
+import { loadNotebook } from "../extensions/notebook/notebook"
 import { runNotebookInsert, runNotebookReadCell } from "../extensions/notebook/tools"
-import { copyFixture, createTempNotebook, escapeForRegex } from "./helpers"
+import { copyFixture, createTempNotebook } from "./helpers"
 
 test("runNotebookInsert returns concise confirmation and inserts readable cell", async () => {
 	const fixture = await copyFixture("lovely-history.ipynb")
@@ -35,13 +35,10 @@ test("runNotebookInsert works by index on notebooks without ids", async () => {
 			type: "code",
 			source: "print(123)\n"
 		})
-		const inserted = result.details as { id: string }
-		expect(result.content[0]?.text).toMatch(
-			new RegExp(
-				`^Inserted cell ${inserted.id} after index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`
-			)
-		)
-		expect(readCellById(await loadNotebook(fixture.path), inserted.id).source).toBe("print(123)\n")
+		const inserted = result.details as { id?: string; index: number }
+		expect(inserted.id).toBeUndefined()
+		expect(result.content[0]?.text).toBe(`Inserted cell index 2 after index 1 in ${fixture.path}.`)
+		expect((await runNotebookReadCell({ path: fixture.path, index: inserted.index })).content[0]?.text).toBe("print(123)\n")
 	} finally {
 		await fixture.cleanup()
 	}
@@ -78,11 +75,11 @@ test("runNotebookInsert appends with index -1", async () => {
 			source: "print(1)\n"
 		})
 
-		const inserted = result.details as { id: string }
-		expect(result.content[0]?.text).toBe(`Inserted cell ${inserted.id} at the end in ${fixture.path}.`)
+		const inserted = result.details as { id?: string; index: number }
+		expect(result.content[0]?.text).toBe(`Inserted cell index ${inserted.index} at the end in ${fixture.path}.`)
 		const saved = await loadNotebook(fixture.path)
 		expect(saved.cells).toHaveLength(1)
-		expect(saved.cells[0]?.id).toBe(inserted.id)
+		expect(saved.cells[0]?.id).toBeUndefined()
 		expect(saved.cells[0]?.source).toEqual(["print(1)\n"])
 	} finally {
 		await fixture.cleanup()

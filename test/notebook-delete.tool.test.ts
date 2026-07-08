@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { runNotebookDelete, runNotebookReadCell } from "../extensions/notebook/tools"
-import { copyFixture, escapeForRegex } from "./helpers"
+import { copyFixture } from "./helpers"
 
 test("runNotebookDelete returns concise confirmation and removes the cell", async () => {
 	const fixture = await copyFixture("lovely-history.ipynb")
@@ -19,9 +19,7 @@ test("runNotebookDelete works by index on notebooks without ids", async () => {
 
 	try {
 		const result = await runNotebookDelete({ path: fixture.path, index: 1 })
-		expect(result.content[0]?.text).toMatch(
-			new RegExp(`^Deleted cell index 1 from ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`)
-		)
+		expect(result.content[0]?.text).toBe(`Deleted cell index 1 from ${fixture.path}.`)
 		await expect(runNotebookReadCell({ path: fixture.path, index: 1 })).resolves.toMatchObject({
 			content: [{ type: "text", text: expect.any(String) }]
 		})

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { loadNotebook } from "../extensions/notebook/notebook"
 import { runNotebookReadCell, runNotebookWriteCell } from "../extensions/notebook/tools"
-import { copyFixture, escapeForRegex } from "./helpers"
+import { copyFixture } from "./helpers"
 
 test("runNotebookWriteCell returns concise confirmation", async () => {
 	const fixture = await copyFixture("lovely-history.ipynb")
@@ -24,18 +24,16 @@ test("runNotebookWriteCell fails on missing cell id", async () => {
 	}
 })
 
-test("runNotebookWriteCell persists ids and writes by index on notebooks without ids", async () => {
+test("runNotebookWriteCell writes by index on notebooks without ids", async () => {
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
 		const writeResult = await runNotebookWriteCell({ path: fixture.path, index: 1, source: "# %matplotlib widget\n" })
-		expect(writeResult.content[0]?.text).toMatch(
-			new RegExp(`^Wrote cell index 1 in ${escapeForRegex(fixture.path)}\\.\\nAssigned ids in .*: 1=[0-9a-f]{8} 2=[0-9a-f]{8}$`)
-		)
+		expect(writeResult.content[0]?.text).toBe(`Wrote cell index 1 in ${fixture.path}.`)
 		const saved = await loadNotebook(fixture.path)
-		expect(saved.nbformat_minor).toBe(5)
-		expect(saved.cells[0]?.id).toMatch(/^[0-9a-f]{8}$/)
-		expect(saved.cells[1]?.id).toMatch(/^[0-9a-f]{8}$/)
+		expect(saved.nbformat_minor).toBe(2)
+		expect(saved.cells[0]?.id).toBeUndefined()
+		expect(saved.cells[1]?.id).toBeUndefined()
 		expect(Array.isArray(saved.cells[0]?.source)).toBe(true)
 
 		const result = await runNotebookReadCell({ path: fixture.path, index: 1 })
