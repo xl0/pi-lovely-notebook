@@ -42,3 +42,9 @@ test("runNotebookReadCell rejects invalid line slices", async () => {
 		"Invalid lineLimit: -1"
 	)
 })
+
+test("runNotebookReadCell omits subtly corrupted inline images", async () => {
+	const result = await runNotebookReadCell({ path: join(FIXTURE_DIR, "subtly-corrupt-images.ipynb"), cellId: "corrupt-md" })
+	expect(result.content[0]?.text).toContain("![corrupt png]([image: image/png])")
+	expect(result.content[1]).toEqual({ type: "text", text: "[Image omitted: could not be resized below the inline image size limit.]" })
+})

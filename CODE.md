@@ -6,8 +6,10 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
 
 - Repo root is now the Pi package.
 - `package.json` declares a Pi package via `pi.extensions: ["./extensions"]`.
+  - Pi package deps use `@earendil-works/*`; local dev links point to `../pi-mono/packages/*` via `npm link`
 - Main extension entry: `extensions/notebook/index.ts`.
   - every notebook tool now has a short prompt snippet for discoverability
+  - every notebook tool has compact TUI call rendering that shows selected args; summary has a collapsed text preview with expand hint
   - shared notebook-tool semantics live once on `notebook_summary` as namespaced guidelines, so deduped system-prompt guidance keeps notebook scope clear
   - path normalization at the adapter seam: strips leading `@`, resolves relative paths against `ctx.cwd`
   - all mutation tools are wrapped in `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
@@ -51,13 +53,15 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - read one output by 1-based index from a code cell; returns text for text-like mimes, image for binary image mimes (image/png, image/jpeg, etc.); image/svg+xml is returned as text; rich outputs with multiple mime types require the `mime` parameter
   - read one image attachment from a cell by key; returns image content
   - `notebook_read_cell` on markdown cells extracts `data:` URI images: replaces them with `[image: mime/type]` markers in text and returns decoded images as `ImageContent` items
+  - image-returning tool paths run through Pi's inline image resizer; images that cannot be resized into provider limits become text omission notes instead of `ImageContent`
+  - `test/fixtures/subtly-corrupt-images.ipynb` covers valid-looking PNG base64 whose IDAT payload is not decodable, across inline markdown, output, and attachment paths
   - `notebook_summary` lists attachment keys in cell headers via `atts="key1 key2"` attribute
   - save path rewrites notebook JSON in Jupyter-style formatting: source as `string[]`, 1-space JSON indentation, trailing newline
 - Tests split by layer:
   - `test/notebook-core.test.ts` covers parse/validation, pure cell ops, formatting helpers, id assignment, load/save roundtrips, save formatting, and fixture-level core behavior
   - `test/notebook-*.tool.test.ts` keeps one file per tool for runner/output/selector behavior
   - `test/notebook-*.workflow.test.ts` keeps one file per multi-step workflow (write→read parity, no-id mutation flow, real-fixture edit/save)
-  - current suite passes under `bun test` (63 tests)
+  - current suite passes under `bun test` (67 tests)
 - Local tool smoke runner: `bun run tool -- <tool-name> '<json-args>'` prints raw tool text output without launching Pi.
 - Biome config lives in `biome.json`.
   - schema migrated to match installed CLI `2.4.14`
