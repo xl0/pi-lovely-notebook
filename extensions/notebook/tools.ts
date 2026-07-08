@@ -1,4 +1,5 @@
-import { StringEnum } from "@mariozechner/pi-ai"
+import { StringEnum } from "@earendil-works/pi-ai"
+import { resizeImage } from "@earendil-works/pi-coding-agent"
 import { type Static, Type } from "typebox"
 import type { Notebook, PersistedCellId } from "./notebook"
 import {
@@ -134,6 +135,15 @@ export interface NotebookToolResult {
 	details: unknown
 }
 
+async function pushImageContent(content: NotebookToolResult["content"], image: { mime: string; data: string }) {
+	const resized = await resizeImage(Buffer.from(image.data, "base64"), image.mime)
+	if (!resized) {
+		content.push({ type: "text", text: "[Image omitted: could not be resized below the inline image size limit.]" })
+		return
+	}
+	content.push({ type: "image", data: resized.data, mimeType: resized.mimeType })
+}
+
 function formatAssignedIds(notebookPath: string, assigned: PersistedCellId[]): string {
 	if (assigned.length === 0) return ""
 	return `\nAssigned ids in ${notebookPath}: ${assigned.map(({ index, id }) => `${index}=${id}`).join(" ")}`
@@ -188,7 +198,7 @@ export async function runNotebookReadCell(params: NotebookReadCellParams): Promi
 		const { text, images } = extractDataUriImages(sliced)
 		const content: NotebookToolResult["content"] = [{ type: "text", text }]
 		for (const img of images) {
-			content.push({ type: "image", data: img.data, mimeType: img.mime })
+			await pushImageContent(content, img)
 		}
 		return { content, details: result }
 	}
@@ -300,8 +310,10 @@ export async function runNotebookReadOutput(params: NotebookReadOutputParams): P
 	const result = readCellOutput(notebook, selector, params.outputIndex, params.mime)
 
 	if (result.imageData !== undefined) {
+		const content: NotebookToolResult["content"] = []
+		await pushImageContent(content, { data: result.imageData, mime: result.mime })
 		return {
-			content: [{ type: "image", data: result.imageData, mimeType: result.mime }],
+			content,
 			details: result
 		}
 	}
@@ -312,7 +324,7 @@ export async function runNotebookReadOutput(params: NotebookReadOutputParams): P
 		content.push({ type: "text", text: sliced })
 	}
 	for (const img of result.images ?? []) {
-		content.push({ type: "image", data: img.data, mimeType: img.mime })
+		await pushImageContent(content, img)
 	}
 	return { content, details: result }
 }
@@ -321,8 +333,10 @@ export async function runNotebookReadCellAttachment(params: NotebookReadCellAtta
 	const notebook = await loadNotebook(params.path)
 	const selector = requireSingleCellSelector(params.cellId, params.index)
 	const result = readCellAttachment(notebook, selector, params.key)
+	const content: NotebookToolResult["content"] = []
+	await pushImageContent(content, result)
 	return {
-		content: [{ type: "image", data: result.data, mimeType: result.mime }],
+		content,
 		details: result
 	}
 }
