@@ -5,6 +5,7 @@ import { type Static, Type } from "typebox"
 import type { Notebook } from "./notebook"
 import {
 	clearCellOutputs,
+	createNotebook,
 	deleteCell,
 	editCellSource,
 	extractDataUriImages,
@@ -63,6 +64,19 @@ async function runNotebookSummary(params: Static<typeof notebookSummaryParams>):
 }
 
 export const notebookSummaryTool = { params: notebookSummaryParams, run: runNotebookSummary } as const
+
+const notebookCreateParams = Type.Object({
+	path: Type.String({ description: "Path for the new .ipynb notebook." }),
+	language: Type.Optional(Type.String({ description: "Notebook language_info.name. Defaults to python3." }))
+})
+
+async function runNotebookCreate(params: Static<typeof notebookCreateParams>): Promise<NotebookToolContent> {
+	const language = params.language ?? "python3"
+	await saveNotebook(params.path, createNotebook(language))
+	return [{ type: "text", text: `Created notebook ${params.path} with language ${language}.` }]
+}
+
+export const notebookCreateTool = { params: notebookCreateParams, run: runNotebookCreate } as const
 
 const notebookReadCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),

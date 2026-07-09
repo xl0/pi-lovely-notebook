@@ -19,7 +19,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - all mutation tools are wrapped in `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
   - read-only tools are unqueued but still get path normalization
 - Pure notebook logic lives in `extensions/notebook/notebook.ts`.
-  - exported functions: parseNotebook, loadNotebook, saveNotebook, summarizeNotebook, formatNotebookSummary, readCellAtIndex, resolveCellIndex, sliceCellSource, writeCellSource, editCellSource, applyExactSourceEdits, insertCell, deleteCell, moveCell, mergeCell, clearCellOutputs, readCellOutput, readCellAttachment, extractDataUriImages, normalizeSource
+  - exported functions: parseNotebook, loadNotebook, saveNotebook, createNotebook, summarizeNotebook, formatNotebookSummary, readCellAtIndex, resolveCellIndex, sliceCellSource, writeCellSource, editCellSource, applyExactSourceEdits, insertCell, deleteCell, moveCell, mergeCell, clearCellOutputs, readCellOutput, readCellAttachment, extractDataUriImages, normalizeSource
   - `readCellsById` and `readCellRange` removed from public interface (unused by any tool)
   - tool-layer selectors resolve to 0-based cell indexes at the boundary; core mutation/read helpers operate on indexes only
   - display-data MIME splitting/normalization is centralized in one internal helper shared by output summaries and output reads
@@ -33,6 +33,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - selection helpers keep cellId/index validation, resolution, and confirmation text formatting in the tool layer
 - Implemented tools:
   - `notebook_summary({ path })`
+  - `notebook_create({ path, language? })`
   - `notebook_read_cell({ path, cellId?|index?, lineOffset?, lineLimit?, includeImages? })`
   - `notebook_write_cell({ path, cellId?|index?, source })`
   - `notebook_edit_cell({ path, cellId?|index?, edits })`
@@ -45,6 +46,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - `notebook_read_cell_attachment({ path, cellId?|index?, key })`
 - Current notebook support:
   - parse notebook JSON directly; require `nbformat === 4` and cell types `code`, `markdown`, or `raw`
+  - create/overwrite an empty nbformat 4.5 notebook with `metadata.language_info.name`, defaulting to `python3`
   - source is normalized to one internal `string`; save serializes source back to Jupyter-style `string[]`
   - cell metadata is normalized to a typed JSON object internally
   - attachment containers are normalized to typed MIME bundles internally; attachment MIME values remain JSON values
@@ -75,7 +77,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - `test/notebook-core.test.ts` covers parse/validation, pure cell ops, formatting helpers, load/save roundtrips, save formatting, and fixture-level core behavior
   - `test/notebook-*.tool.test.ts` keeps one file per tool for runner/output/selector behavior
   - `test/notebook-*.workflow.test.ts` keeps one file per multi-step workflow (write→read parity, no-id mutation flow, real-fixture edit/save)
-  - current suite passes under `bun test` (69 tests)
+  - current suite passes under `bun test` (71 tests)
 - Local tool smoke runner: `bun run tool -- <tool-name> '<json-args>'` prints raw tool text output without launching Pi.
 - Biome config lives in `biome.json`.
   - schema migrated to match installed CLI `2.4.14`
