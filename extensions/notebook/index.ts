@@ -5,6 +5,7 @@ import { Text } from "@earendil-works/pi-tui"
 import {
 	type NotebookToolContent,
 	notebookClearOutputsTool,
+	notebookCreateTool,
 	notebookDeleteTool,
 	notebookEditCellTool,
 	notebookInsertTool,
@@ -32,6 +33,7 @@ type NotebookRenderArgs = {
 	lineOffset?: number
 	lineLimit?: number
 	includeImages?: boolean
+	language?: string
 }
 type NotebookToolRenderResult = { content: NotebookToolContent }
 
@@ -61,7 +63,8 @@ function renderNotebookCall(name: string, args: NotebookRenderArgs, theme: Noteb
 		formatArg("dir", args.direction),
 		formatArg("offset", args.lineOffset),
 		formatArg("limit", args.lineLimit),
-		formatArg("images", args.includeImages)
+		formatArg("images", args.includeImages),
+		formatArg("language", args.language)
 	].filter(part => part !== undefined)
 
 	const text =
@@ -128,6 +131,19 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		renderResult: (result, { expanded }, theme) => renderNotebookTextResult(result, expanded, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			return notebookToolResult(notebookSummaryTool.run({ path: normalizeNotebookPath(params.path, ctx.cwd) }))
+		}
+	})
+
+	pi.registerTool({
+		name: "notebook_create",
+		label: "Notebook Create",
+		description: "Create a new empty Jupyter notebook.",
+		promptSnippet: "Create or overwrite an empty .ipynb notebook.",
+		parameters: notebookCreateTool.params,
+		renderCall: (args, theme) => renderNotebookCall("notebook_create", args, theme),
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const path = normalizeNotebookPath(params.path, ctx.cwd)
+			return withFileMutationQueue(path, () => notebookToolResult(notebookCreateTool.run({ ...params, path })))
 		}
 	})
 

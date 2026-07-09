@@ -453,12 +453,23 @@ export async function loadNotebook(path: string): Promise<Notebook> {
 	return parseNotebook(await readFile(path, "utf8"))
 }
 
+function serializeNotebook(notebook: Notebook): string {
+	return `${JSON.stringify({ ...notebook, cells: notebook.cells.map(cell => ({ ...cell, source: sourceToLines(cell.source) })) }, null, 1)}\n`
+}
+
 export async function saveNotebook(path: string, notebook: Notebook): Promise<void> {
-	await writeFile(
-		path,
-		`${JSON.stringify({ ...notebook, cells: notebook.cells.map(cell => ({ ...cell, source: sourceToLines(cell.source) })) }, null, 1)}\n`,
-		"utf8"
-	)
+	await writeFile(path, serializeNotebook(notebook), "utf8")
+}
+
+export function createNotebook(language = "python3"): Notebook {
+	return {
+		cells: [],
+		metadata: {
+			language_info: { name: language }
+		},
+		nbformat: 4,
+		nbformat_minor: 5
+	}
 }
 
 export function summarizeNotebook(path: string, notebook: Notebook): NotebookSummary {
