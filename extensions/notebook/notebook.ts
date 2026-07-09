@@ -1,14 +1,49 @@
 import { randomBytes } from "node:crypto"
 import { readFile, writeFile } from "node:fs/promises"
 
-export interface NotebookCell {
-	cell_type: string
-	id?: string
-	source?: string | string[]
-	metadata?: Record<string, unknown>
-	attachments?: unknown
+export type NotebookCellType = "code" | "markdown" | "raw"
+export type NotebookJson = string | number | boolean | null | NotebookJson[] | { [key: string]: NotebookJson }
+export type NotebookMimeBundle = Record<string, NotebookJson>
+export type NotebookAttachments = Record<string, NotebookMimeBundle>
+export type NotebookOutputType = "stream" | "display_data" | "execute_result" | "error"
+
+export interface NotebookStreamOutput {
+	output_type: "stream"
+	name?: string
+	text?: string
+}
+
+export interface NotebookDisplayDataOutput {
+	output_type: "display_data"
+	data?: NotebookMimeBundle
+	metadata?: Record<string, NotebookJson>
+}
+
+export interface NotebookExecuteResultOutput {
+	output_type: "execute_result"
+	data?: NotebookMimeBundle
+	metadata?: Record<string, NotebookJson>
+	// Output-level prompt number. Usually matches the parent code cell's execution_count, but nbformat stores both.
 	execution_count?: number | null
-	outputs?: unknown[]
+}
+
+export interface NotebookErrorOutput {
+	output_type: "error"
+	ename?: string
+	evalue?: string
+	traceback?: string[]
+}
+
+export type NotebookOutput = NotebookStreamOutput | NotebookDisplayDataOutput | NotebookExecuteResultOutput | NotebookErrorOutput
+
+export interface NotebookCell {
+	cell_type: NotebookCellType
+	id?: string
+	source: string
+	metadata?: Record<string, NotebookJson>
+	attachments?: NotebookAttachments
+	execution_count?: number | null
+	outputs?: NotebookOutput[]
 	[key: string]: unknown
 }
 
@@ -92,11 +127,7 @@ export interface NotebookInsertCell {
 	source: string
 }
 
-export interface NotebookInsertTarget {
-	cellId?: string
-	index?: number
-	direction: "before" | "after"
-}
+export type NotebookCellSelector = { cellId: string; index?: never } | { cellId?: never; index: number }
 
 export interface NotebookMergeResult {
 	merged: NotebookReadCell
@@ -112,6 +143,10 @@ type RawNotebook = RawObject & {
 
 type RawCell = RawObject & {
 	cell_type?: unknown
+	source?: unknown
+	metadata?: unknown
+	attachments?: unknown
+	outputs?: unknown
 }
 
 type RawOutput = RawObject & {
@@ -120,8 +155,10 @@ type RawOutput = RawObject & {
 	text?: unknown
 	data?: unknown
 	ename?: unknown
+	evalue?: unknown
 	execution_count?: unknown
 	traceback?: unknown
+	metadata?: unknown
 }
 
 function isObject(value: unknown): value is RawObject {
@@ -134,21 +171,117 @@ function storedCellId(cell: NotebookCell): string | undefined {
 
 function cellAt(notebook: Notebook, index: number): NotebookCell {
 	const cell = notebook.cells[index]
-	if (cell === undefined) throw new Error(`Cell index out of range: ${index + 1}`)
+	if (cell === undefined) throw new Error(`Cell index out of range: ${index}`)
 	return cell
 }
 
 function cellIndexFromUserIndex(notebook: Notebook, index: number): number {
-	if (!Number.isInteger(index) || index < 1 || index > notebook.cells.length) {
+	if (!Number.isInteger(index) || index < 0 || index >= notebook.cells.length) {
 		throw new Error(`Cell index out of range: ${index}`)
 	}
-	return index - 1
+	return index
 }
 
-export function normalizeSource(source: NotebookCell["source"]): string {
+export function normalizeSource(source: unknown): string {
 	if (typeof source === "string") return source
 	if (Array.isArray(source)) return source.join("")
 	return ""
+}
+
+function isNotebookCellType(value: unknown): value is NotebookCellType {
+	return value === "code" || value === "markdown" || value === "raw"
+}
+
+function isNotebookOutputType(value: unknown): value is NotebookOutputType {
+	return value === "stream" || value === "display_data" || value === "execute_result" || value === "error"
+}
+
+function isNotebookJson(value: unknown): value is NotebookJson {
+	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return true
+	if (Array.isArray(value)) return value.every(isNotebookJson)
+	return isObject(value) && Object.values(value).every(isNotebookJson)
+}
+
+function normalizeJsonObject(value: unknown, label: string): Record<string, NotebookJson> | undefined {
+	if (value === undefined) return undefined
+	if (!isObject(value)) throw new Error(`${label} must be an object`)
+	const normalized: Record<string, NotebookJson> = {}
+	for (const [key, item] of Object.entries(value)) {
+		if (!isNotebookJson(item)) throw new Error(`${label} contains non-JSON value at ${JSON.stringify(key)}`)
+		normalized[key] = item
+	}
+	return normalized
+}
+
+function normalizeAttachments(value: unknown, cellIndex: number): NotebookAttachments | undefined {
+	if (value === undefined) return undefined
+	if (!isObject(value)) throw new Error(`Cell ${cellIndex} attachments must be an object`)
+
+	const attachments: NotebookAttachments = {}
+	for (const [key, attachment] of Object.entries(value)) {
+		if (!isObject(attachment)) throw new Error(`Attachment ${JSON.stringify(key)} in cell ${cellIndex} must be an object`)
+		attachments[key] = normalizeJsonObject(attachment, `Attachment ${JSON.stringify(key)} in cell ${cellIndex}`) ?? {}
+	}
+	return attachments
+}
+
+function normalizeOutputs(value: unknown, cellIndex: number): NotebookOutput[] | undefined {
+	if (value === undefined) return undefined
+	if (!Array.isArray(value)) throw new Error(`Cell ${cellIndex} outputs must be an array`)
+
+	return value.map((output, outputIndex) => {
+		if (!isObject(output)) throw new Error(`Output ${outputIndex} in cell ${cellIndex} must be an object`)
+		const raw = output as RawOutput
+		if (typeof raw.output_type !== "string") throw new Error(`Output ${outputIndex} in cell ${cellIndex} is missing output_type`)
+		if (!isNotebookOutputType(raw.output_type)) {
+			throw new Error(`Unsupported output type in cell ${cellIndex} output ${outputIndex}: ${raw.output_type}`)
+		}
+
+		if (raw.output_type === "stream") {
+			const { output_type: _outputType, name: _name, text: _text, ...rest } = raw
+			return {
+				...rest,
+				output_type: raw.output_type,
+				...(typeof raw.name === "string" ? { name: raw.name } : {}),
+				...(raw.text === undefined ? {} : { text: normalizeOutputText(raw.text) })
+			}
+		}
+
+		if (raw.output_type === "display_data") {
+			const { output_type: _outputType, data: _data, metadata: _metadata, ...rest } = raw
+			const data = normalizeJsonObject(raw.data, `Output ${outputIndex} in cell ${cellIndex} data`)
+			const metadata = normalizeJsonObject(raw.metadata, `Output ${outputIndex} in cell ${cellIndex} metadata`)
+			return {
+				...rest,
+				output_type: raw.output_type,
+				...(data === undefined ? {} : { data }),
+				...(metadata === undefined ? {} : { metadata })
+			}
+		}
+
+		if (raw.output_type === "execute_result") {
+			const { output_type: _outputType, data: _data, metadata: _metadata, execution_count: _executionCount, ...rest } = raw
+			const data = normalizeJsonObject(raw.data, `Output ${outputIndex} in cell ${cellIndex} data`)
+			const metadata = normalizeJsonObject(raw.metadata, `Output ${outputIndex} in cell ${cellIndex} metadata`)
+			return {
+				...rest,
+				output_type: raw.output_type,
+				...(data === undefined ? {} : { data }),
+				...(metadata === undefined ? {} : { metadata }),
+				...(typeof raw.execution_count === "number" || raw.execution_count === null ? { execution_count: raw.execution_count } : {})
+			}
+		}
+
+		const { output_type: _outputType, ename: _ename, evalue: _evalue, traceback: _traceback, ...rest } = raw
+		const traceback = Array.isArray(raw.traceback) ? raw.traceback.filter((line): line is string => typeof line === "string") : undefined
+		return {
+			...rest,
+			output_type: raw.output_type,
+			...(typeof raw.ename === "string" ? { ename: raw.ename } : {}),
+			...(typeof raw.evalue === "string" ? { evalue: raw.evalue } : {}),
+			...(traceback === undefined ? {} : { traceback })
+		}
+	})
 }
 
 function sourceToLines(source: string): string[] {
@@ -172,19 +305,33 @@ function normalizeOutputText(value: unknown): string {
 	return ""
 }
 
+function isBinaryImageMime(mime: string): boolean {
+	return mime.startsWith("image/") && mime !== "image/svg+xml"
+}
+
 function isTextLikeMime(mime: string): boolean {
 	return mime.startsWith("text/") || mime === "application/json"
 }
 
-function summarizeOutput(output: unknown, index: number): NotebookOutputSummary[] {
-	const raw = isObject(output) ? (output as RawOutput) : {}
-	const type = typeof raw.output_type === "string" ? raw.output_type : "unknown"
+function displayDataEntries(data: NotebookMimeBundle): Array<{ mime: string; text: string; image?: { mime: string; data: string } }> {
+	return Object.entries(data).map(([mime, value]) => ({
+		mime,
+		text: normalizeOutputText(value),
+		...(isBinaryImageMime(mime) ? { image: { mime, data: normalizeOutputText(value) } } : {})
+	}))
+}
+
+function summarizeOutput(output: NotebookOutput, index: number): NotebookOutputSummary[] {
+	const raw = output
+	const type = raw.output_type
 	const base = {
-		index: index + 1,
+		index,
 		type,
-		...(typeof raw.name === "string" ? { name: raw.name } : {}),
-		...(typeof raw.ename === "string" ? { ename: raw.ename } : {}),
-		...(typeof raw.execution_count === "number" || raw.execution_count === null ? { executionCount: raw.execution_count } : {})
+		...("name" in raw && typeof raw.name === "string" ? { name: raw.name } : {}),
+		...("ename" in raw && typeof raw.ename === "string" ? { ename: raw.ename } : {}),
+		...("execution_count" in raw && (typeof raw.execution_count === "number" || raw.execution_count === null)
+			? { executionCount: raw.execution_count }
+			: {})
 	}
 
 	if (type === "stream") {
@@ -200,13 +347,13 @@ function summarizeOutput(output: unknown, index: number): NotebookOutputSummary[
 		]
 	}
 
-	if ((type === "display_data" || type === "execute_result") && isObject(raw.data)) {
-		return Object.entries(raw.data).map(([mime, value]) => {
-			const text = isTextLikeMime(mime) ? normalizeOutputText(value) : ""
+	if ((type === "display_data" || type === "execute_result") && raw.data !== undefined) {
+		return displayDataEntries(raw.data).map(entry => {
+			const text = isTextLikeMime(entry.mime) ? entry.text : ""
 			const preview = previewSource(text)
 			return {
 				...base,
-				mime,
+				mime: entry.mime,
 				preview: preview.text,
 				previewLines: preview.lines,
 				previewTruncated: preview.truncated,
@@ -256,21 +403,19 @@ function readCell(cell: NotebookCell, index: number): NotebookReadCell {
 	const id = storedCellId(cell)
 	const executionCount = cell.cell_type === "code" ? ((cell.execution_count as number | null | undefined) ?? null) : undefined
 	return {
-		index: index + 1,
+		index,
 		...(id === undefined ? {} : { id }),
 		type: cell.cell_type,
-		source: normalizeSource(cell.source),
+		source: cell.source,
 		...(executionCount === undefined ? {} : { executionCount })
 	}
 }
 
-function findCellIndexBySelector(notebook: Notebook, selector: string | number): number {
-	if (typeof selector === "number") {
-		return cellIndexFromUserIndex(notebook, selector)
-	}
+export function resolveCellIndex(notebook: Notebook, selector: NotebookCellSelector): number {
+	if (selector.cellId === undefined) return cellIndexFromUserIndex(notebook, selector.index)
 
-	const index = notebook.cells.findIndex(cell => storedCellId(cell) === selector)
-	if (index === -1) throw new Error(`Cell not found: ${selector}`)
+	const index = notebook.cells.findIndex(cell => storedCellId(cell) === selector.cellId)
+	if (index === -1) throw new Error(`Cell not found: ${selector.cellId}`)
 	return index
 }
 
@@ -281,12 +426,27 @@ export function parseNotebook(text: string): Notebook {
 	if (notebook.nbformat !== 4) throw new Error("Only nbformat 4 notebooks are supported")
 	if (!Array.isArray(notebook.cells)) throw new Error("Notebook cells must be an array")
 
+	const cells: NotebookCell[] = []
 	for (const [index, cell] of notebook.cells.entries()) {
 		if (!isObject(cell)) throw new Error(`Cell ${index} must be an object`)
-		if (typeof (cell as RawCell).cell_type !== "string") throw new Error(`Cell ${index} is missing cell_type`)
+		const rawCell = cell as RawCell
+		if (typeof rawCell.cell_type !== "string") throw new Error(`Cell ${index} is missing cell_type`)
+		if (!isNotebookCellType(rawCell.cell_type)) throw new Error(`Unsupported cell type in cell ${index}: ${rawCell.cell_type}`)
+		const { attachments: _attachments, metadata: _metadata, outputs: _outputs, ...rest } = cell as RawObject
+		const metadata = normalizeJsonObject(rawCell.metadata, `Cell ${index} metadata`)
+		const attachments = normalizeAttachments(rawCell.attachments, index)
+		const outputs = normalizeOutputs(rawCell.outputs, index)
+		cells.push({
+			...rest,
+			cell_type: rawCell.cell_type,
+			source: normalizeSource(rawCell.source),
+			...(metadata === undefined ? {} : { metadata }),
+			...(attachments === undefined ? {} : { attachments }),
+			...(outputs === undefined ? {} : { outputs })
+		})
 	}
 
-	return notebook as Notebook
+	return { ...notebook, cells } as Notebook
 }
 
 export async function loadNotebook(path: string): Promise<Notebook> {
@@ -294,10 +454,11 @@ export async function loadNotebook(path: string): Promise<Notebook> {
 }
 
 export async function saveNotebook(path: string, notebook: Notebook): Promise<void> {
-	for (const [index, cell] of notebook.cells.entries()) {
-		notebook.cells[index] = { ...cell, source: sourceToLines(normalizeSource(cell.source)) }
-	}
-	await writeFile(path, `${JSON.stringify(notebook, null, 1)}\n`, "utf8")
+	await writeFile(
+		path,
+		`${JSON.stringify({ ...notebook, cells: notebook.cells.map(cell => ({ ...cell, source: sourceToLines(cell.source) })) }, null, 1)}\n`,
+		"utf8"
+	)
 }
 
 export function summarizeNotebook(path: string, notebook: Notebook): NotebookSummary {
@@ -313,7 +474,7 @@ export function summarizeNotebook(path: string, notebook: Notebook): NotebookSum
 		language: typeof languageInfo.name === "string" ? languageInfo.name : null,
 		cellCount: notebook.cells.length,
 		cells: notebook.cells.map((cell, index) => {
-			const source = normalizeSource(cell.source)
+			const source = cell.source
 			const id = storedCellId(cell)
 			const executionCount = cell.cell_type === "code" ? ((cell.execution_count as number | null | undefined) ?? null) : undefined
 			const outputs = cell.cell_type === "code" && Array.isArray(cell.outputs) ? cell.outputs.flatMap(summarizeOutput) : undefined
@@ -321,7 +482,7 @@ export function summarizeNotebook(path: string, notebook: Notebook): NotebookSum
 			const attachmentKeys = isObject(cell.attachments) ? Object.keys(cell.attachments) : undefined
 			const preview = previewSource(source)
 			return {
-				index: index + 1,
+				index,
 				...(id === undefined ? {} : { id }),
 				type: cell.cell_type,
 				sourceLines: sourceLineCount(source),
@@ -397,23 +558,13 @@ export function sliceCellSource(source: string, lineOffset = 0, lineLimit?: numb
 	return text.length === 0 ? continuation : `${text}${text.endsWith("\n") ? "" : "\n"}${continuation}`
 }
 
-export function readAllCells(notebook: Notebook): NotebookReadCell[] {
-	return notebook.cells.map((cell, index) => readCell(cell, index))
+export function readCellAtIndex(notebook: Notebook, cellIndex: number): NotebookReadCell {
+	return readCell(cellAt(notebook, cellIndex), cellIndex)
 }
 
-function findCellIndexById(notebook: Notebook, cellId: string): number {
-	return findCellIndexBySelector(notebook, cellId)
-}
-
-export function readCellById(notebook: Notebook, cellId: string): NotebookReadCell {
-	const index = findCellIndexById(notebook, cellId)
-	return readCell(cellAt(notebook, index), index)
-}
-
-export function writeCellSource(notebook: Notebook, cell: string | number, source: string): Notebook {
-	const index = findCellIndexBySelector(notebook, cell)
-	const current = cellAt(notebook, index)
-	notebook.cells[index] = {
+export function writeCellSource(notebook: Notebook, cellIndex: number, source: string): Notebook {
+	const current = cellAt(notebook, cellIndex)
+	notebook.cells[cellIndex] = {
 		...current,
 		source
 	}
@@ -453,29 +604,18 @@ export function applyExactSourceEdits(source: string, edits: NotebookSourceEdit[
 	return result
 }
 
-export function editCellSource(notebook: Notebook, cell: string | number, edits: NotebookSourceEdit[]): Notebook {
-	const index = findCellIndexBySelector(notebook, cell)
-	notebook.cells[index] = {
-		...cellAt(notebook, index),
-		source: applyExactSourceEdits(readCell(cellAt(notebook, index), index).source, edits)
+export function editCellSource(notebook: Notebook, cellIndex: number, edits: NotebookSourceEdit[]): Notebook {
+	const cell = cellAt(notebook, cellIndex)
+	notebook.cells[cellIndex] = {
+		...cell,
+		source: applyExactSourceEdits(cell.source, edits)
 	}
 	return notebook
 }
 
-export function insertCell(notebook: Notebook, target: NotebookInsertTarget, cell: NotebookInsertCell): NotebookReadCell {
-	if ((target.cellId === undefined) === (target.index === undefined)) {
-		throw new Error("Provide exactly one of cellId or index")
-	}
-
-	const targetIndex = target.index as number | undefined
-	const anchorIndex =
-		target.cellId !== undefined
-			? findCellIndexById(notebook, target.cellId)
-			: targetIndex === -1
-				? -1
-				: cellIndexFromUserIndex(notebook, targetIndex as number)
-
-	const insertIndex = anchorIndex === -1 ? notebook.cells.length : anchorIndex + (target.direction === "after" ? 1 : 0)
+export function insertCell(notebook: Notebook, insertIndex: number, cell: NotebookInsertCell): NotebookReadCell {
+	if (!Number.isInteger(insertIndex) || insertIndex < 0 || insertIndex > notebook.cells.length)
+		throw new Error(`Insert index out of range: ${insertIndex}`)
 	const id = notebook.nbformat_minor >= 5 || notebook.cells.some(cell => storedCellId(cell)) ? createCellId(notebook) : undefined
 	const nextCell: NotebookCell = {
 		cell_type: cell.type,
@@ -493,27 +633,19 @@ export function insertCell(notebook: Notebook, target: NotebookInsertTarget, cel
 	return readCell(cellAt(notebook, insertIndex), insertIndex)
 }
 
-export function deleteCell(notebook: Notebook, cell: string | number): NotebookReadCell {
-	const index = findCellIndexBySelector(notebook, cell)
-	const deleted = readCell(cellAt(notebook, index), index)
-	notebook.cells.splice(index, 1)
+export function deleteCell(notebook: Notebook, cellIndex: number): NotebookReadCell {
+	const deleted = readCell(cellAt(notebook, cellIndex), cellIndex)
+	notebook.cells.splice(cellIndex, 1)
 	return deleted
 }
 
-export function moveCell(
-	notebook: Notebook,
-	cell: string | number,
-	target: string | number,
-	direction: "before" | "after"
-): NotebookReadCell {
-	const fromIndex = findCellIndexBySelector(notebook, cell)
-	const targetIndex = typeof target === "number" && target === -1 ? notebook.cells.length - 1 : findCellIndexBySelector(notebook, target)
-
+export function moveCell(notebook: Notebook, fromIndex: number, targetIndex: number, direction: "before" | "after"): NotebookReadCell {
+	const movedCell = cellAt(notebook, fromIndex)
+	cellAt(notebook, targetIndex)
 	if (targetIndex === fromIndex) {
 		throw new Error("Cannot move a cell relative to itself")
 	}
 
-	const movedCell = cellAt(notebook, fromIndex)
 	notebook.cells.splice(fromIndex, 1)
 	const anchorIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
 	const insertIndex = direction === "before" ? anchorIndex : anchorIndex + 1
@@ -521,12 +653,11 @@ export function moveCell(
 	return readCell(cellAt(notebook, insertIndex), insertIndex)
 }
 
-export function mergeCell(notebook: Notebook, cell: string | number, direction: "above" | "below"): NotebookMergeResult {
-	const anchorIndex = findCellIndexBySelector(notebook, cell)
+export function mergeCell(notebook: Notebook, anchorIndex: number, direction: "above" | "below"): NotebookMergeResult {
 	const otherIndex = anchorIndex + (direction === "above" ? -1 : 1)
 
 	if (otherIndex < 0 || otherIndex >= notebook.cells.length) {
-		throw new Error(`No cell to merge ${direction} from ${cell}`)
+		throw new Error(`No cell to merge ${direction} from index ${anchorIndex}`)
 	}
 
 	const anchor = cellAt(notebook, anchorIndex)
@@ -535,10 +666,7 @@ export function mergeCell(notebook: Notebook, cell: string | number, direction: 
 		throw new Error(`Cannot merge ${anchor.cell_type} cell with ${other.cell_type} cell`)
 	}
 
-	const source =
-		direction === "above"
-			? joinCellSources(normalizeSource(other.source), normalizeSource(anchor.source))
-			: joinCellSources(normalizeSource(anchor.source), normalizeSource(other.source))
+	const source = direction === "above" ? joinCellSources(other.source, anchor.source) : joinCellSources(anchor.source, other.source)
 
 	notebook.cells[anchorIndex] = { ...anchor, source }
 	notebook.cells.splice(otherIndex, 1)
@@ -557,34 +685,29 @@ export interface NotebookReadOutput {
 	outputType: string
 	mime: string
 	text?: string
-	imageData?: string
 	images?: Array<{ mime: string; data: string }>
 }
 
-export function readCellOutput(notebook: Notebook, cell: string | number, outputIndex: number, mime?: string): NotebookReadOutput {
-	const index = findCellIndexBySelector(notebook, cell)
-	const cellData = cellAt(notebook, index)
+export function readCellOutput(notebook: Notebook, cellIndex: number, outputIndex: number, mime?: string): NotebookReadOutput {
+	const cellData = cellAt(notebook, cellIndex)
 	const cellId = storedCellId(cellData)
 
 	if (cellData.cell_type !== "code") {
-		throw new Error(`Cell ${cell} is not a code cell`)
+		throw new Error(`Cell index ${cellIndex} is not a code cell`)
 	}
 
 	const outputs = Array.isArray(cellData.outputs) ? cellData.outputs : []
-	if (!Number.isInteger(outputIndex) || outputIndex < 1 || outputIndex > outputs.length) {
+	if (!Number.isInteger(outputIndex) || outputIndex < 0 || outputIndex >= outputs.length) {
 		throw new Error(`Output index out of range: ${outputIndex} (cell has ${outputs.length} outputs)`)
 	}
 
-	const arrayOutputIndex = outputIndex - 1
-	const output = outputs[arrayOutputIndex]
-	if (!isObject(output)) {
-		throw new Error(`Output ${outputIndex} is not an object`)
-	}
+	const output = outputs[outputIndex]
+	if (output === undefined) throw new Error(`Output index out of range: ${outputIndex} (cell has ${outputs.length} outputs)`)
 
-	const raw = output as RawOutput
-	const outputType = typeof raw.output_type === "string" ? raw.output_type : "unknown"
+	const raw = output
+	const outputType = raw.output_type
 	const base = {
-		cellIndex: index + 1,
+		cellIndex,
 		...(cellId === undefined ? {} : { cellId }),
 		outputIndex,
 		outputType
@@ -622,21 +745,18 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 		if (selectedMime === undefined && mimeTypes.length === 1) {
 			selectedMime = mimeTypes[0]
 		}
+		const entries = displayDataEntries(data)
 		if (selectedMime === undefined) {
-			const textMimes = mimeTypes.filter(mt => !(mt.startsWith("image/") && mt !== "image/svg+xml"))
-			const imageMimes = mimeTypes.filter(mt => mt.startsWith("image/") && mt !== "image/svg+xml")
+			const textEntries = entries.filter(entry => entry.image === undefined)
 			const text =
-				textMimes.length > 0 ? textMimes.map(mt => `<output mime="${mt}" />\n${normalizeOutputText(data[mt])}`).join("\n") : undefined
-			const images = imageMimes.map(mt => {
-				const value = data[mt]
-				return { mime: mt, data: typeof value === "string" ? value : Array.isArray(value) ? value.join("") : "" }
-			})
+				textEntries.length > 0 ? textEntries.map(entry => `<output mime="${entry.mime}" />\n${entry.text}`).join("\n") : undefined
+			const images = entries.flatMap(entry => (entry.image === undefined ? [] : [entry.image]))
 			if (text === undefined && images.length === 0) {
 				throw new Error(`Output ${outputIndex} has no displayable content`)
 			}
 			return {
 				...base,
-				mime: [...textMimes, ...imageMimes].join(", "),
+				mime: entries.map(entry => entry.mime).join(", "),
 				...(text === undefined ? {} : { text }),
 				...(images.length > 0 ? { images } : {})
 			}
@@ -647,14 +767,14 @@ export function readCellOutput(notebook: Notebook, cell: string | number, output
 		}
 
 		const value = data[selectedMime]
-		const isImage = selectedMime.startsWith("image/") && selectedMime !== "image/svg+xml"
+		const isImage = isBinaryImageMime(selectedMime)
 
 		if (isImage) {
-			const data = typeof value === "string" ? value : Array.isArray(value) ? value.join("") : ""
+			const data = normalizeOutputText(value)
 			return {
 				...base,
 				mime: selectedMime,
-				imageData: data
+				images: [{ mime: selectedMime, data }]
 			}
 		}
 
@@ -679,13 +799,12 @@ export function extractDataUriImages(source: string): { text: string; images: Ar
 	return { text, images }
 }
 
-export function readCellAttachment(notebook: Notebook, cell: string | number, key: string): { mime: string; data: string } {
-	const index = findCellIndexBySelector(notebook, cell)
-	const cellData = cellAt(notebook, index)
+export function readCellAttachment(notebook: Notebook, cellIndex: number, key: string): { mime: string; data: string } {
+	const cellData = cellAt(notebook, cellIndex)
 
 	const attachments = cellData.attachments
 	if (!isObject(attachments) || !(key in attachments)) {
-		throw new Error(`Attachment "${key}" not found in cell ${cell}`)
+		throw new Error(`Attachment "${key}" not found in cell index ${cellIndex}`)
 	}
 
 	const attachment = attachments[key]
@@ -706,10 +825,9 @@ export function readCellAttachment(notebook: Notebook, cell: string | number, ke
 	return { mime, data }
 }
 
-export function clearCellOutputs(notebook: Notebook, cell: string | number): NotebookReadCell {
-	const index = findCellIndexBySelector(notebook, cell)
-	const current = cellAt(notebook, index)
-	if (current.cell_type !== "code") throw new Error(`Cell is not code: ${cell}`)
-	notebook.cells[index] = { ...current, outputs: [] }
-	return readCell(cellAt(notebook, index), index)
+export function clearCellOutputs(notebook: Notebook, cellIndex: number): NotebookReadCell {
+	const current = cellAt(notebook, cellIndex)
+	if (current.cell_type !== "code") throw new Error(`Cell is not code: index ${cellIndex}`)
+	notebook.cells[cellIndex] = { ...current, outputs: [] }
+	return readCell(cellAt(notebook, cellIndex), cellIndex)
 }

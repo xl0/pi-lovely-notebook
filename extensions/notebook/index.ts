@@ -3,54 +3,49 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { keyHint, withFileMutationQueue } from "@earendil-works/pi-coding-agent"
 import { Text } from "@earendil-works/pi-tui"
 import {
-	notebookClearOutputsParams,
-	notebookDeleteParams,
-	notebookEditCellParams,
-	notebookInsertParams,
-	notebookMergeParams,
-	notebookMoveParams,
-	notebookReadCellAttachmentParams,
-	notebookReadCellParams,
-	notebookReadOutputParams,
-	notebookSummaryParams,
-	notebookWriteCellParams,
-	runNotebookClearOutputs,
-	runNotebookDelete,
-	runNotebookEditCell,
-	runNotebookInsert,
-	runNotebookMerge,
-	runNotebookMove,
-	runNotebookReadCell,
-	runNotebookReadCellAttachment,
-	runNotebookReadOutput,
-	runNotebookSummary,
-	runNotebookWriteCell
+	type NotebookToolContent,
+	notebookClearOutputsTool,
+	notebookDeleteTool,
+	notebookEditCellTool,
+	notebookInsertTool,
+	notebookMergeTool,
+	notebookMoveTool,
+	notebookReadCellAttachmentTool,
+	notebookReadCellTool,
+	notebookReadOutputTool,
+	notebookSummaryTool,
+	notebookWriteCellTool
 } from "./tools"
 
 type NotebookRenderTheme = Parameters<NonNullable<Parameters<ExtensionAPI["registerTool"]>[0]["renderCall"]>>[1]
 type NotebookRenderArgs = {
-	path?: unknown
-	cellId?: unknown
-	index?: unknown
-	targetCellId?: unknown
-	targetIndex?: unknown
-	outputIndex?: unknown
-	mime?: unknown
-	key?: unknown
-	type?: unknown
-	direction?: unknown
-	lineOffset?: unknown
-	lineLimit?: unknown
+	path?: string
+	cellId?: string
+	index?: number
+	targetCellId?: string
+	targetIndex?: number
+	outputIndex?: number
+	mime?: string
+	key?: string
+	type?: "code" | "markdown" | "raw"
+	direction?: "before" | "after" | "above" | "below"
+	lineOffset?: number
+	lineLimit?: number
+	includeImages?: boolean
 }
-type NotebookToolResult = Awaited<ReturnType<typeof runNotebookSummary>>
+type NotebookToolRenderResult = { content: NotebookToolContent }
 
-function shortPath(path: unknown): string | undefined {
-	if (typeof path !== "string" || path.length === 0) return undefined
+async function notebookToolResult(content: Promise<NotebookToolContent>) {
+	return { content: await content, details: undefined }
+}
+
+function shortPath(path: string | undefined): string | undefined {
+	if (!path) return undefined
 	return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 }
 
-function formatArg(name: string, value: unknown): string | undefined {
-	if (value === undefined || value === null || value === "") return undefined
+function formatArg(name: string, value: string | number | boolean | undefined): string | undefined {
+	if (value === undefined || value === "") return undefined
 	return `${name}=${String(value)}`
 }
 
@@ -65,7 +60,8 @@ function renderNotebookCall(name: string, args: NotebookRenderArgs, theme: Noteb
 		formatArg("type", args.type),
 		formatArg("dir", args.direction),
 		formatArg("offset", args.lineOffset),
-		formatArg("limit", args.lineLimit)
+		formatArg("limit", args.lineLimit),
+		formatArg("images", args.includeImages)
 	].filter(part => part !== undefined)
 
 	const text =
@@ -89,7 +85,7 @@ function renderNotebookReadCall(name: string, args: NotebookRenderArgs, theme: N
 	return new Text(`${theme.fg("toolTitle", theme.bold(name))} ${pathDisplay}${suffix}`, 0, 0)
 }
 
-function renderNotebookTextResult(result: NotebookToolResult, expanded: boolean, theme: NotebookRenderTheme): Text {
+function renderNotebookTextResult(result: NotebookToolRenderResult, expanded: boolean, theme: NotebookRenderTheme): Text {
 	const output = result.content.find(item => item.type === "text")?.text ?? ""
 	const lines = output.split("\n")
 	let end = lines.length
@@ -114,10 +110,9 @@ function normalizeNotebookPath(rawPath: string, cwd: string): string {
 export default function notebookExtension(pi: ExtensionAPI) {
 	const notebookToolGuidelines = [
 		"Notebook tools: use notebook_summary first to discover structure and cell ids.",
-		"Notebook tools: cell index selectors are 1-based; for notebooks without stored cell ids, use index selectors.",
+		"Notebook tools: cell index selectors are 0-based; for notebooks without stored cell ids, use index selectors.",
 		"notebook_edit_cell: replacements must match exactly and uniquely.",
 		"notebook_insert: index -1 appends.",
-		"notebook_move: targetIndex -1 means the end.",
 		"notebook_merge: cells must be adjacent and the same type; the anchor cell id is preserved.",
 		"notebook_clear_outputs: preserves source and execution count."
 	]
@@ -128,11 +123,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		description: "Summarize a Jupyter notebook by cell.",
 		promptSnippet: "Discover existing cells",
 		promptGuidelines: notebookToolGuidelines,
-		parameters: notebookSummaryParams,
+		parameters: notebookSummaryTool.params,
 		renderCall: (args, theme) => renderNotebookReadCall("notebook_summary", args, theme),
 		renderResult: (result, { expanded }, theme) => renderNotebookTextResult(result, expanded, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			return runNotebookSummary({ path: normalizeNotebookPath(params.path, ctx.cwd) })
+			return notebookToolResult(notebookSummaryTool.run({ path: normalizeNotebookPath(params.path, ctx.cwd) }))
 		}
 	})
 
@@ -141,10 +136,10 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Read Cell",
 		description: "Read one notebook cell source.",
 		promptSnippet: "Read one notebook cell source, optionally by line slice.",
-		parameters: notebookReadCellParams,
+		parameters: notebookReadCellTool.params,
 		renderCall: (args, theme) => renderNotebookReadCall("notebook_read_cell", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			return runNotebookReadCell({ ...params, path: normalizeNotebookPath(params.path, ctx.cwd) })
+			return notebookToolResult(notebookReadCellTool.run({ ...params, path: normalizeNotebookPath(params.path, ctx.cwd) }))
 		}
 	})
 
@@ -153,11 +148,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Write Cell",
 		description: "Replace one notebook cell source.",
 		promptSnippet: "Replace one notebook cell source.",
-		parameters: notebookWriteCellParams,
+		parameters: notebookWriteCellTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_write_cell", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookWriteCell({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookWriteCellTool.run({ ...params, path })))
 		}
 	})
 
@@ -166,11 +161,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Edit Cell",
 		description: "Apply exact source replacements within one notebook cell.",
 		promptSnippet: "Edit part of one notebook cell with exact text replacements.",
-		parameters: notebookEditCellParams,
+		parameters: notebookEditCellTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_edit_cell", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookEditCell({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookEditCellTool.run({ ...params, path })))
 		}
 	})
 
@@ -179,11 +174,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Insert",
 		description: "Insert one notebook cell near an anchor.",
 		promptSnippet: "Insert a new code, markdown, or raw cell near an existing anchor.",
-		parameters: notebookInsertParams,
+		parameters: notebookInsertTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_insert", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookInsert({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookInsertTool.run({ ...params, path })))
 		}
 	})
 
@@ -192,11 +187,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Delete",
 		description: "Delete one notebook cell.",
 		promptSnippet: "Delete one notebook cell.",
-		parameters: notebookDeleteParams,
+		parameters: notebookDeleteTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_delete", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookDelete({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookDeleteTool.run({ ...params, path })))
 		}
 	})
 
@@ -205,11 +200,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Move",
 		description: "Move one notebook cell relative to another.",
 		promptSnippet: "Move one notebook cell before or after another.",
-		parameters: notebookMoveParams,
+		parameters: notebookMoveTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_move", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookMove({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookMoveTool.run({ ...params, path })))
 		}
 	})
 
@@ -218,11 +213,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Merge",
 		description: "Merge one notebook cell with an adjacent cell.",
 		promptSnippet: "Merge one notebook cell with the cell above or below.",
-		parameters: notebookMergeParams,
+		parameters: notebookMergeTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_merge", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookMerge({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookMergeTool.run({ ...params, path })))
 		}
 	})
 
@@ -231,11 +226,11 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Clear Outputs",
 		description: "Clear outputs from one code cell.",
 		promptSnippet: "Remove outputs from one code cell.",
-		parameters: notebookClearOutputsParams,
+		parameters: notebookClearOutputsTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_clear_outputs", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
-			return withFileMutationQueue(path, () => runNotebookClearOutputs({ ...params, path }))
+			return withFileMutationQueue(path, () => notebookToolResult(notebookClearOutputsTool.run({ ...params, path })))
 		}
 	})
 
@@ -244,10 +239,10 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Read Cell Output",
 		description: "Read one output from a code cell. Supports text and image outputs.",
 		promptSnippet: "Read a specific cell output by index. Use notebook_summary first to discover available outputs and their mime types.",
-		parameters: notebookReadOutputParams,
+		parameters: notebookReadOutputTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_read_cell_output", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			return runNotebookReadOutput({ ...params, path: normalizeNotebookPath(params.path, ctx.cwd) })
+			return notebookToolResult(notebookReadOutputTool.run({ ...params, path: normalizeNotebookPath(params.path, ctx.cwd) }))
 		}
 	})
 
@@ -256,10 +251,10 @@ export default function notebookExtension(pi: ExtensionAPI) {
 		label: "Notebook Read Cell Attachment",
 		description: "Read an image attachment from a cell by its key.",
 		promptSnippet: "Read a cell attachment image. Use notebook_summary first to discover available attachment keys (atts attribute).",
-		parameters: notebookReadCellAttachmentParams,
+		parameters: notebookReadCellAttachmentTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_read_cell_attachment", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			return runNotebookReadCellAttachment({ ...params, path: normalizeNotebookPath(params.path, ctx.cwd) })
+			return notebookToolResult(notebookReadCellAttachmentTool.run({ ...params, path: normalizeNotebookPath(params.path, ctx.cwd) }))
 		}
 	})
 }

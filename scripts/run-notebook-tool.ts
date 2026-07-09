@@ -1,4 +1,30 @@
-import { type NotebookToolName, notebookToolRunners } from "../extensions/notebook/tools"
+import {
+	notebookClearOutputsTool,
+	notebookDeleteTool,
+	notebookEditCellTool,
+	notebookInsertTool,
+	notebookMergeTool,
+	notebookMoveTool,
+	notebookReadCellAttachmentTool,
+	notebookReadCellTool,
+	notebookReadOutputTool,
+	notebookSummaryTool,
+	notebookWriteCellTool
+} from "../extensions/notebook/tools"
+
+const runners = {
+	notebook_summary: notebookSummaryTool.run,
+	notebook_read_cell: notebookReadCellTool.run,
+	notebook_write_cell: notebookWriteCellTool.run,
+	notebook_edit_cell: notebookEditCellTool.run,
+	notebook_insert: notebookInsertTool.run,
+	notebook_delete: notebookDeleteTool.run,
+	notebook_move: notebookMoveTool.run,
+	notebook_merge: notebookMergeTool.run,
+	notebook_clear_outputs: notebookClearOutputsTool.run,
+	notebook_read_cell_output: notebookReadOutputTool.run,
+	notebook_read_cell_attachment: notebookReadCellAttachmentTool.run
+} as const
 
 const [toolName, jsonArgs] = process.argv.slice(2)
 
@@ -7,14 +33,14 @@ if (!toolName || !jsonArgs) {
 	process.exit(1)
 }
 
-if (!(toolName in notebookToolRunners)) {
+if (!(toolName in runners)) {
 	console.error(`Unknown tool: ${toolName}`)
 	process.exit(1)
 }
 
 const args = JSON.parse(jsonArgs) as object
-const result = await notebookToolRunners[toolName as NotebookToolName](args as never)
-for (const part of result.content) {
+const content = await runners[toolName as keyof typeof runners](args as never)
+for (const part of content) {
 	if (part.type === "text") {
 		process.stdout.write(`${part.text}\n`)
 	} else if (part.type === "image") {
