@@ -22,12 +22,13 @@
 		"tool": "bun scripts/run-notebook-tool.ts"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.14",
+		"@earendil-works/pi-ai": "file:../pi-mono/packages/ai",
+		"@earendil-works/pi-coding-agent": "file:../pi-mono/packages/coding-agent",
+		"@earendil-works/pi-tui": "file:../pi-mono/packages/tui",
 		"@biomejs/biome": "^2.4.14",
 		"@typescript/native-preview": "^7.0.0-dev.20260502.1",
 		"bun-types": "^1.3.13",
-		"typebox": "^1.1.38",
-		"typescript": "^6.0.3"
+		"typebox": "^1.1.38"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-ai": "*",

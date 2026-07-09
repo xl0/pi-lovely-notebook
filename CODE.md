@@ -6,7 +6,11 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
 
 - Repo root is now the Pi package.
 - `package.json` declares a Pi package via `pi.extensions: ["./extensions"]`.
-  - Pi package deps use `@earendil-works/*`; local dev links point to `../pi-mono/packages/*` via `npm link`
+  - Pi core imports stay in `peerDependencies` with `"*"` ranges per Pi package docs, so installed packages use Pi's bundled core modules
+  - local development resolves those same Pi packages through `devDependencies` using `file:../pi-mono/packages/*` instead of manual npm/bun links
+  - `typebox` is treated like Pi core: `peerDependencies` for runtime, `devDependencies` for local typechecking
+  - typechecking uses `@typescript/native-preview` (`tsgo`); no separate `typescript` package is needed
+  - `bun-types` remains a dev dependency and is listed in `tsconfig.json` because tests import `bun:test` and helpers use Bun APIs
 - Main extension entry: `extensions/notebook/index.ts`.
   - every notebook tool now has a short prompt snippet for discoverability
   - every notebook tool has compact TUI call rendering that shows selected args; summary has a collapsed text preview with expand hint
