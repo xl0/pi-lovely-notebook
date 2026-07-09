@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test"
-import { loadNotebook, readAllCells } from "../extensions/notebook/notebook"
-import { runNotebookEditCell } from "../extensions/notebook/tools"
-import { copyFixture } from "./helpers"
+import { loadNotebook } from "../extensions/notebook/notebook"
+import { notebookEditCellTool } from "../extensions/notebook/tools"
+import { copyFixture, firstText, readAllCells } from "./helpers"
 
 test("runNotebookEditCell works by index on notebooks without ids", async () => {
 	const fixture = await copyFixture("lovely-test-no-ids.ipynb")
 
 	try {
-		const result = await runNotebookEditCell({
+		const result = await notebookEditCellTool.run({
 			path: fixture.path,
-			index: 2,
+			index: 1,
 			edits: [{ oldText: "import numpy as np", newText: "import numpy as numpy" }]
 		})
-		expect(result.content[0]?.text).toContain(`Successfully replaced 1 block(s) in cell index 2 of ${fixture.path}.`)
+		expect(firstText(result)).toContain(`Successfully replaced 1 block(s) in cell index 1 of ${fixture.path}.`)
 		const saved = await loadNotebook(fixture.path)
 		expect(saved.cells[0]?.id).toBeUndefined()
 		expect(saved.cells[1]?.id).toBeUndefined()

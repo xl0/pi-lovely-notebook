@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { editCellSource, loadNotebook, readCellById, saveNotebook } from "../extensions/notebook/notebook"
-import { copyFixture } from "./helpers"
+import { editCellSource, loadNotebook, saveNotebook } from "../extensions/notebook/notebook"
+import { copyFixture, readCellById } from "./helpers"
 
 test("reads and edits a real fixture cell while preserving outputs", async () => {
 	const fixture = await copyFixture("lovely-history.ipynb")
@@ -10,7 +10,7 @@ test("reads and edits a real fixture cell while preserving outputs", async () =>
 		const target = readCellById(notebook, "95cca932")
 		expect(target.source).toContain('t = torch.tensor(10, device="cuda")')
 
-		editCellSource(notebook, "95cca932", [{ oldText: 'tensor(10, device="cuda")', newText: 'tensor(11, device="cuda")' }])
+		editCellSource(notebook, 4, [{ oldText: 'tensor(10, device="cuda")', newText: 'tensor(11, device="cuda")' }])
 		await saveNotebook(fixture.path, notebook)
 
 		const updated = await loadNotebook(fixture.path)

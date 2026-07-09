@@ -1,8 +1,23 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { type Notebook, type NotebookReadCell, readCellAtIndex, resolveCellIndex } from "../extensions/notebook/notebook"
+import type { NotebookToolContent } from "../extensions/notebook/tools"
 
 export const FIXTURE_DIR = join(import.meta.dir, "fixtures")
+
+export function firstText(content: NotebookToolContent): string | undefined {
+	const first = content[0]
+	return first?.type === "text" ? first.text : undefined
+}
+
+export function readAllCells(notebook: Notebook): NotebookReadCell[] {
+	return notebook.cells.map((_cell, index) => readCellAtIndex(notebook, index))
+}
+
+export function readCellById(notebook: Notebook, cellId: string): NotebookReadCell {
+	return readCellAtIndex(notebook, resolveCellIndex(notebook, { cellId }))
+}
 
 export async function copyFixture(name: string) {
 	const dir = await mkdtemp(join(tmpdir(), "notebook-test-"))
