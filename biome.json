@@ -3,6 +3,11 @@
 	"files": {
 		"includes": ["**", "!**/*.ipynb", "!node_modules", "!.git", "!bun.lock"]
 	},
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab",
