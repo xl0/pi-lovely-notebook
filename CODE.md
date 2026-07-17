@@ -81,6 +81,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
 - Local tool smoke runner: `bun run tool -- <tool-name> '<json-args>'` prints raw tool text output without launching Pi.
 - Biome config lives in `biome.json`.
   - schema migrated to match installed CLI `2.4.14`
+  - Git VCS integration enabled so Biome honors repository and nested `.gitignore` files
   - formatter enabled with `lineWidth: 140`, LF endings, tabs, no trailing commas, semicolons `asNeeded`, arrow parens `asNeeded`
   - linter enabled with recommended rules
   - excludes `.ipynb`, `node_modules`, `.git`, and `bun.lock`
