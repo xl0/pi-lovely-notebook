@@ -4,6 +4,7 @@ import { keyHint, withFileMutationQueue } from "@earendil-works/pi-coding-agent"
 import { Text } from "@earendil-works/pi-tui"
 import {
 	type NotebookToolContent,
+	notebookChangeCellTypeTool,
 	notebookClearOutputsTool,
 	notebookCreateTool,
 	notebookDeleteTool,
@@ -114,6 +115,7 @@ export default function notebookExtension(pi: ExtensionAPI) {
 	const notebookToolGuidelines = [
 		"Notebook tools: use notebook_summary first to discover structure and cell ids.",
 		"Notebook tools: cell index selectors are 0-based; for notebooks without stored cell ids, use index selectors.",
+		"notebook_change_cell_type and notebook_write_cell type changes clear fields incompatible with the target type.",
 		"notebook_edit_cell: replacements must match exactly and uniquely.",
 		"notebook_insert: index -1 appends.",
 		"notebook_merge: cells must be adjacent and the same type; the anchor cell id is preserved.",
@@ -162,13 +164,26 @@ export default function notebookExtension(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "notebook_write_cell",
 		label: "Notebook Write Cell",
-		description: "Replace one notebook cell source.",
-		promptSnippet: "Replace one notebook cell source.",
+		description: "Replace one notebook cell source and optionally change its type.",
+		promptSnippet: "Replace one notebook cell source, optionally changing its type.",
 		parameters: notebookWriteCellTool.params,
 		renderCall: (args, theme) => renderNotebookCall("notebook_write_cell", args, theme),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const path = normalizeNotebookPath(params.path, ctx.cwd)
 			return withFileMutationQueue(path, () => notebookToolResult(notebookWriteCellTool.run({ ...params, path })))
+		}
+	})
+
+	pi.registerTool({
+		name: "notebook_change_cell_type",
+		label: "Notebook Change Cell Type",
+		description: "Change one notebook cell type.",
+		promptSnippet: "Change one notebook cell between code, markdown, and raw.",
+		parameters: notebookChangeCellTypeTool.params,
+		renderCall: (args, theme) => renderNotebookCall("notebook_change_cell_type", args, theme),
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const path = normalizeNotebookPath(params.path, ctx.cwd)
+			return withFileMutationQueue(path, () => notebookToolResult(notebookChangeCellTypeTool.run({ ...params, path })))
 		}
 	})
 

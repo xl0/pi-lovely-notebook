@@ -46,3 +46,20 @@ test("runNotebookWriteCell writes by index on notebooks without ids", async () =
 		await fixture.cleanup()
 	}
 })
+
+test("runNotebookWriteCell can change the cell type", async () => {
+	const fixture = await copyFixture("lovely-history.ipynb")
+
+	try {
+		const result = await notebookWriteCellTool.run({ path: fixture.path, cellId: "95cca932", type: "markdown", source: "Result\n" })
+		expect(firstText(result)).toBe(`Wrote cell 95cca932 as markdown in ${fixture.path}.`)
+		const saved = await loadNotebook(fixture.path)
+		const cell = saved.cells.find(cell => cell.id === "95cca932")
+		expect(cell?.cell_type).toBe("markdown")
+		expect(cell?.source).toBe("Result\n")
+		expect(cell?.execution_count).toBeUndefined()
+		expect(cell?.outputs).toBeUndefined()
+	} finally {
+		await fixture.cleanup()
+	}
+})

@@ -582,6 +582,23 @@ export function writeCellSource(notebook: Notebook, cellIndex: number, source: s
 	return notebook
 }
 
+export function changeCellType(notebook: Notebook, cellIndex: number, type: NotebookCellType): NotebookReadCell {
+	const cell = cellAt(notebook, cellIndex)
+	if (cell.cell_type === type) return readCell(cell, cellIndex)
+
+	cell.cell_type = type
+	if (type === "code") {
+		delete cell.attachments
+		cell.execution_count = null
+		cell.outputs = []
+	} else {
+		delete cell.execution_count
+		delete cell.outputs
+	}
+
+	return readCell(cell, cellIndex)
+}
+
 function findUniqueMatch(haystack: string, needle: string): { start: number; end: number } {
 	const start = haystack.indexOf(needle)
 	if (start === -1) throw new Error(`Edit text not found: ${JSON.stringify(needle)}`)
