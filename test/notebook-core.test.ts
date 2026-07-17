@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
 	applyExactSourceEdits,
+	changeCellType,
 	clearCellOutputs,
 	deleteCell,
 	editCellSource,
@@ -147,6 +148,42 @@ describe("notebook core", () => {
 		writeCellSource(notebook, 1, "print(42)\n")
 		expect(notebook.cells[1]?.metadata).toEqual({ trusted: true })
 		expect(() => writeCellSource(notebook, 99, "x")).toThrow("Cell index out of range: 99")
+	})
+
+	test("changeCellType normalizes type-specific fields", () => {
+		const notebook = parseNotebook(createNotebookText())
+		const firstCell = notebook.cells[0]
+		if (firstCell === undefined) throw new Error("Missing fixture cell")
+		firstCell.attachments = { "plot.png": { "image/png": "data" } }
+
+		const code = changeCellType(notebook, 0, "code")
+		expect(code.type).toBe("code")
+		expect(notebook.cells[0]?.metadata).toEqual({ tags: ["lead"] })
+		expect(notebook.cells[0]?.attachments).toBeUndefined()
+		expect(notebook.cells[0]?.execution_count).toBeNull()
+		expect(notebook.cells[0]?.outputs).toEqual([])
+
+		const markdown = changeCellType(notebook, 1, "markdown")
+		expect(markdown.type).toBe("markdown")
+		expect(notebook.cells[1]?.execution_count).toBeUndefined()
+		expect(notebook.cells[1]?.outputs).toBeUndefined()
+	})
+
+	test("changeCellType is a no-op when type already matches", () => {
+		const notebook = parseNotebook(createNotebookText())
+		changeCellType(notebook, 1, "code")
+		expect(notebook.cells[1]?.execution_count).toBe(7)
+		expect(notebook.cells[1]?.outputs).toEqual([{ output_type: "stream" }])
+	})
+
+	test("changeCellType preserves attachments when changing markdown to raw", () => {
+		const notebook = parseNotebook(createNotebookText())
+		const cell = notebook.cells[0]
+		if (cell === undefined) throw new Error("Missing fixture cell")
+		cell.attachments = { "plot.png": { "image/png": "data" } }
+
+		changeCellType(notebook, 0, "raw")
+		expect(cell.attachments).toEqual({ "plot.png": { "image/png": "data" } })
 	})
 
 	test("editCellSource updates one cell in place and preserves outputs", () => {

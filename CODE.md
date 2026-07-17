@@ -19,7 +19,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - all mutation tools are wrapped in `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
   - read-only tools are unqueued but still get path normalization
 - Pure notebook logic lives in `extensions/notebook/notebook.ts`.
-  - exported functions: parseNotebook, loadNotebook, saveNotebook, createNotebook, summarizeNotebook, formatNotebookSummary, readCellAtIndex, resolveCellIndex, sliceCellSource, writeCellSource, editCellSource, applyExactSourceEdits, insertCell, deleteCell, moveCell, mergeCell, clearCellOutputs, readCellOutput, readCellAttachment, extractDataUriImages, normalizeSource
+  - exported functions: parseNotebook, loadNotebook, saveNotebook, createNotebook, summarizeNotebook, formatNotebookSummary, readCellAtIndex, resolveCellIndex, sliceCellSource, writeCellSource, changeCellType, editCellSource, applyExactSourceEdits, insertCell, deleteCell, moveCell, mergeCell, clearCellOutputs, readCellOutput, readCellAttachment, extractDataUriImages, normalizeSource
   - `readCellsById` and `readCellRange` removed from public interface (unused by any tool)
   - tool-layer selectors resolve to 0-based cell indexes at the boundary; core mutation/read helpers operate on indexes only
   - display-data MIME splitting/normalization is centralized in one internal helper shared by output summaries and output reads
@@ -35,7 +35,8 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - `notebook_summary({ path })`
   - `notebook_create({ path, language? })`
   - `notebook_read_cell({ path, cellId?|index?, lineOffset?, lineLimit?, includeImages? })`
-  - `notebook_write_cell({ path, cellId?|index?, source })`
+  - `notebook_write_cell({ path, cellId?|index?, type?, source })`
+  - `notebook_change_cell_type({ path, cellId?|index?, type })`
   - `notebook_edit_cell({ path, cellId?|index?, edits })`
   - `notebook_insert({ path, cellId?|index?, direction, type, source })`
   - `notebook_delete({ path, cellId?|index? })`
@@ -61,7 +62,8 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - source mutation tools are explicitly cell-scoped by name: `notebook_read_cell`, `notebook_write_cell`, `notebook_edit_cell`
   - mutation tools accept id selectors for cells that have ids, and 0-based index selectors for cells that do not
   - no-id notebooks stay no-id on mutation; existing missing ids are not backfilled; inserted cells get ids only when the notebook already uses ids or has `nbformat_minor >= 5`
-  - write/edit preserve other cell fields like metadata/outputs and return concise confirmation text
+  - write/edit preserve other cell fields like metadata/outputs and return concise confirmation text; write can optionally change cell type
+  - changing cell type preserves source, id, metadata, and attachments where valid; code cells initialize empty outputs/null execution count and remove attachments, while conversion away from code removes code-only fields
   - insert one code/markdown/raw cell before or after an anchor cell id or 0-based index; `index=-1` appends
   - move one cell before or after another cell by id or 0-based index
   - merge one cell with the adjacent same-type cell `above` or `below`, preserving the anchor id and inserting one boundary newline when needed
@@ -77,7 +79,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - `test/notebook-core.test.ts` covers parse/validation, pure cell ops, formatting helpers, load/save roundtrips, save formatting, and fixture-level core behavior
   - `test/notebook-*.tool.test.ts` keeps one file per tool for runner/output/selector behavior
   - `test/notebook-*.workflow.test.ts` keeps one file per multi-step workflow (write→read parity, no-id mutation flow, real-fixture edit/save)
-  - current suite passes under `bun test` (71 tests)
+  - current suite passes under `bun test` (77 tests)
 - Local tool smoke runner: `bun run tool -- <tool-name> '<json-args>'` prints raw tool text output without launching Pi.
 - Biome config lives in `biome.json`.
   - schema migrated to match installed CLI `2.4.14`

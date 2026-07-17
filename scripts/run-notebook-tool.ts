@@ -1,4 +1,5 @@
 import {
+	notebookChangeCellTypeTool,
 	notebookClearOutputsTool,
 	notebookCreateTool,
 	notebookDeleteTool,
@@ -18,6 +19,7 @@ const runners = {
 	notebook_create: notebookCreateTool.run,
 	notebook_read_cell: notebookReadCellTool.run,
 	notebook_write_cell: notebookWriteCellTool.run,
+	notebook_change_cell_type: notebookChangeCellTypeTool.run,
 	notebook_edit_cell: notebookEditCellTool.run,
 	notebook_insert: notebookInsertTool.run,
 	notebook_delete: notebookDeleteTool.run,

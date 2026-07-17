@@ -4,6 +4,7 @@ import { resizeImage } from "@earendil-works/pi-coding-agent"
 import { type Static, Type } from "typebox"
 import type { Notebook } from "./notebook"
 import {
+	changeCellType,
 	clearCellOutputs,
 	createNotebook,
 	deleteCell,
@@ -112,17 +113,42 @@ const notebookWriteCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to replace." })),
 	index: Type.Optional(Type.Integer({ minimum: 0, description: "0-based cell index to replace." })),
+	type: Type.Optional(StringEnum(["code", "markdown", "raw"] as const, { description: "New cell type. Omit to preserve it." })),
 	source: Type.String({ description: "New full cell source." })
 })
 
 async function runNotebookWriteCell(params: Static<typeof notebookWriteCellParams>): Promise<NotebookToolContent> {
 	await mutateNotebook(params.path, notebook => {
-		writeCellSource(notebook, resolveSelectedCellIndex(notebook, params.cellId, params.index), params.source)
+		const cellIndex = resolveSelectedCellIndex(notebook, params.cellId, params.index)
+		writeCellSource(notebook, cellIndex, params.source)
+		if (params.type !== undefined) changeCellType(notebook, cellIndex, params.type)
 	})
-	return [{ type: "text", text: `Wrote cell ${cellSelectionText(params.cellId, params.index)} in ${params.path}.` }]
+	const type = params.type === undefined ? "" : ` as ${params.type}`
+	return [{ type: "text", text: `Wrote cell ${cellSelectionText(params.cellId, params.index)}${type} in ${params.path}.` }]
 }
 
 export const notebookWriteCellTool = { params: notebookWriteCellParams, run: runNotebookWriteCell } as const
+
+const notebookChangeCellTypeParams = Type.Object({
+	path: Type.String({ description: "Path to an .ipynb notebook." }),
+	cellId: Type.Optional(Type.String({ description: "Cell id to change." })),
+	index: Type.Optional(Type.Integer({ minimum: 0, description: "0-based cell index to change." })),
+	type: StringEnum(["code", "markdown", "raw"] as const, { description: "New cell type." })
+})
+
+async function runNotebookChangeCellType(params: Static<typeof notebookChangeCellTypeParams>): Promise<NotebookToolContent> {
+	await mutateNotebook(params.path, notebook =>
+		changeCellType(notebook, resolveSelectedCellIndex(notebook, params.cellId, params.index), params.type)
+	)
+	return [
+		{
+			type: "text",
+			text: `Changed cell ${cellSelectionText(params.cellId, params.index)} to ${params.type} in ${params.path}.`
+		}
+	]
+}
+
+export const notebookChangeCellTypeTool = { params: notebookChangeCellTypeParams, run: runNotebookChangeCellType } as const
 
 const notebookEditCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
