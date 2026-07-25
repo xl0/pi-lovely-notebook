@@ -1,18 +1,41 @@
 {
 	"name": "@xl0/pi-lovely-notebook",
 	"version": "0.1.0",
+	"description": "Pi extension: per-cell Jupyter notebook tools for reading and editing .ipynb files",
+	"license": "MIT",
+	"type": "module",
+	"author": {
+		"name": "Alexey Zaytsev",
+		"url": "https://github.com/xl0",
+		"email": "alexey.zaytsev@gmail.com"
+	},
+	"homepage": "https://github.com/xl0/pi-lovely-notebook/tree/master/packages/pi#readme",
+	"bugs": {
+		"url": "https://github.com/xl0/pi-lovely-notebook/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xl0/pi-lovely-notebook.git",
+		"directory": "packages/pi"
+	},
 	"keywords": [
 		"pi-package",
 		"jupyter",
-		"python",
 		"jupyter notebook",
+		"notebook",
+		"ipynb",
+		"python",
 		"vscode",
 		"visual studio code"
 	],
-	"type": "module",
 	"files": [
-		"extensions"
+		"extensions/",
+		"README.md",
+		"LICENSE"
 	],
+	"scripts": {
+		"release": "bun publish --access public"
+	},
 	"dependencies": {
 		"@xl0/lovely-notebook": "^0.1.0"
 	},
