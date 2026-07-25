@@ -279,9 +279,22 @@ function sourceToLines(source: string): string[] {
 }
 
 const PREVIEW_MAX_LINES = 5
+const PREVIEW_MAX_LINE_CHARS = 500
 
+function capPreviewLine(line: string): string {
+	if (line.length <= PREVIEW_MAX_LINE_CHARS) return line
+	const newline = line.endsWith("\n") ? "\n" : ""
+	const remaining = line.length - newline.length - PREVIEW_MAX_LINE_CHARS
+	return `${line.slice(0, PREVIEW_MAX_LINE_CHARS)}... [+${remaining} chars]${newline}`
+}
+
+/**
+ * Preview text for summaries: data URIs collapse to `[image: mime/type]` markers and every line
+ * is length-capped. Both matter because one embedded base64 image is a single line, so the line
+ * count alone does not bound a preview.
+ */
 function previewSource(source: string): string {
-	const lines = sourceToLines(source)
+	const lines = sourceToLines(extractDataUriImages(source).text).map(capPreviewLine)
 	if (lines.length <= PREVIEW_MAX_LINES) return lines.join("")
 	const shown = lines.slice(0, PREVIEW_MAX_LINES).join("").replace(/\n?$/, "")
 	return `${shown}\n[${lines.length - PREVIEW_MAX_LINES} more lines]`
