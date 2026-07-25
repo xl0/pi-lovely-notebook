@@ -31,8 +31,12 @@ Root `README.md` is the project entry point; each package carries its own npm-fa
 - Id policy: no-id notebooks stay no-id, missing ids are never backfilled, inserted cells
   get ids only when the notebook already uses ids or `nbformat_minor >= 5`.
 - Summary format: one `meta` line, then a pseudo-XML header per cell (with `atts=`,
-  `n_exec` when present, `id` only when stored), raw source preview capped at 5 lines with a
-  `[N more lines]` marker, then one header per output MIME variant with text-like previews.
+  `n_exec` when present, `id` only when stored), a source preview, then one header per output
+  MIME variant with text-like previews.
+- Previews (source and output alike) are bounded three ways: 5 lines with a `[N more lines]`
+  marker, 500 chars per line, and `data:` image URIs replaced by `[image: mime/type]` — one
+  embedded image is a single line, so the line cap alone does not bound it. `sourceLines` still
+  counts raw source, so `lines=` stays consistent with read pagination.
 
 `packages/core/src/tools.ts` — runners + typebox schemas; `src/index.ts` re-exports both.
 
@@ -121,11 +125,10 @@ cellId/index selectors. Outputs are preserved on mutation. No `NotebookSession` 
 
 ## Gaps
 
-- Manual/host verification is still light: tests, direct Pi tool calls on a copied fixture,
-  `bun run tool` smoke runs, a stub-`ExtensionAPI` registration check, and a stdio JSON-RPC
-  smoke session. The MCP server is registered with Claude Code at local scope for dogfooding
-  (not in the repo); `claude mcp list` shows it connected, but real host tool-call exercise
-  is pending.
+- Verification: tests, direct Pi tool calls on a copied fixture, `bun run tool` smoke runs, a
+  stub-`ExtensionAPI` registration check, and a full pass of all 13 tools through Claude Code
+  against the MCP server (reads, mutations, images, attachments, error paths, concurrent calls).
+  The server is registered with Claude Code at local scope for dogfooding, not in the repo.
 - Not published to npm yet; READMEs already document the npm install paths. Publish core first
   so the `^0.1.0` core dep in the Pi/MCP packages resolves.
 - Pi surfaces raw schema-validator messages instead of friendly allowed-value hints.

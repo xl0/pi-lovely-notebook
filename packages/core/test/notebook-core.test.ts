@@ -311,6 +311,23 @@ describe("notebook core", () => {
 		expect(formatNotebookSummary(summary)).toContain("five\n[1 more lines]")
 	})
 
+	test("summary previews bound embedded images and long lines", () => {
+		const image = `data:image/png;base64,${"A".repeat(4000)}`
+		const notebook = parseNotebook(
+			JSON.stringify({
+				nbformat: 4,
+				nbformat_minor: 5,
+				cells: [
+					{ cell_type: "markdown", id: "a", source: [`![plot](${image})\n`] },
+					{ cell_type: "markdown", id: "b", source: [`${"x".repeat(1200)}\n`] }
+				]
+			})
+		)
+		const summary = summarizeNotebook(notebook)
+		expect(summary.cells[0]?.preview).toBe("![plot]([image: image/png])\n")
+		expect(summary.cells[1]?.preview).toBe(`${"x".repeat(500)}... [+700 chars]\n`)
+	})
+
 	test("summary formats output inventories and output previews", () => {
 		const notebook = parseNotebook(
 			JSON.stringify({
