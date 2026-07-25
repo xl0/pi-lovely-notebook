@@ -150,7 +150,6 @@ async function readSelectedCellSource(path: string, args: NotebookSourceMutation
 type AnyNotebookTool = {
 	name: string
 	description: string
-	mutates: boolean
 	params: object
 	run: (params: never) => Promise<NotebookToolContent>
 }
@@ -273,7 +272,7 @@ export default function notebookExtension(pi: ExtensionAPI) {
 					const content = await resolveContentImages(await tool.run({ ...(params as object), path } as never))
 					return { content, details: generateDiffString(before, after) }
 				}
-				return tool.mutates ? withFileMutationQueue(path, run) : run()
+				return withFileMutationQueue(path, run)
 			}
 		})
 	}

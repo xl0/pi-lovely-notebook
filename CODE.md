@@ -21,13 +21,13 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
   - every notebook tool has compact TUI call rendering that shows selected args; summary has a collapsed text preview with expand hint
   - shared notebook-tool semantics live once on `notebook_summary` as namespaced guidelines (`notebookToolGuidelines` from core)
   - path normalization via core `normalizeNotebookPath`: strips leading `@`, resolves relative paths against `ctx.cwd`
-  - mutation tools (per core `mutates` flag) run under `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
+  - all tools run under `withFileMutationQueue(normalizedPath, ...)`, serializing reads and writes per notebook under Pi's parallel tool execution
   - write/edit capture cell source before mutation and return Pi-local diff details rendered with Pi's standard source diff UI
   - `resolveContentImages` resizes raw core images through Pi's `resizeImage`; unresizable images become `[Image omitted: ...]` notes
 - MCP server: `packages/mcp/src/server.ts` (run `bun packages/mcp/src/server.ts`, or the `lovely-notebook-mcp` bin under bun).
   - low-level SDK `Server` with `tools/list`/`tools/call` handlers; typebox schemas are passed through verbatim as `inputSchema`
   - args validated with typebox `Value.Check`; validation failures and thrown tool errors return `isError` text results
-  - per-file promise-chain queue serializes mutations (MCP hosts may call tools concurrently), canonicalizes existing paths through `realpath`, and removes idle queue entries
+  - per-file promise-chain queue serializes reads and writes (MCP hosts may call tools concurrently), canonicalizes existing paths through `realpath`, and removes idle queue entries
   - relative paths resolve against the MCP server process startup cwd inherited from its launcher
   - no image resizer in the MCP build: images above 4MB base64 are replaced with omission notes
 - Pure notebook logic lives in `packages/core/src/notebook.ts`.
@@ -39,7 +39,7 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
   - string-valued enum parameters use a local `StringEnum` helper so providers see `type: "string"` plus `enum`, not `anyOf`/`const` unions
   - index parameters are schema-bounded as non-negative integers, except `notebook_insert.index` also accepts `-1` for append
   - each params schema/type is colocated with its matching runner; no schemas are shared across tools
-  - each tool exports a `{ name, description, mutates, params, run }` descriptor; adapters and tests use one public symbol per tool
+  - each tool exports a `{ name, description, params, run }` descriptor; adapters and tests use one public symbol per tool
   - runners return core-local `NotebookToolContent` (`{type:"text"}` / `{type:"image", data, mimeType}`), MCP-shaped and structurally Pi-compatible
   - core returns images raw (base64, unresized); resizing/capping is an adapter concern
   - `notebookToolGuidelines` and `normalizeNotebookPath(rawPath, cwd)` are exported for adapters

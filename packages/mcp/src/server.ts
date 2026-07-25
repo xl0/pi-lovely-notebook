@@ -42,7 +42,7 @@ const notebookTools = [
 type NotebookTool = (typeof notebookTools)[number]
 const toolsByName = new Map<string, NotebookTool>(notebookTools.map(tool => [tool.name, tool]))
 
-// Serialize mutations per notebook file; MCP hosts may issue tool calls concurrently.
+// Serialize all access per notebook file; MCP hosts may issue tool calls concurrently.
 const fileQueues = new Map<string, Promise<void>>()
 export async function withFileQueue<T>(path: string, fn: () => Promise<T>): Promise<T> {
 	let key: string
@@ -106,7 +106,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 	const params = { ...args, path: normalizeNotebookPath((args as { path: string }).path, serverCwd) }
 	try {
 		const run = () => tool.run(params as never)
-		const content = capImages(await (tool.mutates ? withFileQueue(params.path, run) : run()))
+		const content = capImages(await withFileQueue(params.path, run))
 		return { content }
 	} catch (error) {
 		return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], isError: true }
