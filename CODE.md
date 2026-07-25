@@ -41,10 +41,13 @@ Root `README.md` is the project entry point; each package carries its own npm-fa
 - Schemas are colocated with their runner and never shared. String enums go through a local
   `StringEnum` helper so providers see `type: "string"` + `enum` rather than `anyOf`/`const`.
 - `mutateNotebook(path, mutate)` consolidates load → mutate → save.
+- `applyExactSourceEdits` follows pi's edit tool: unique matches, no empty `oldText`, no overlaps,
+  must change something. No whitespace-fuzzy fallback (pi has one; we stay exact).
 - Runners return `NotebookToolContent` (`{type:"text"}` / `{type:"image", data, mimeType}`),
   MCP-shaped and structurally Pi-compatible. Images are raw base64; resizing/capping is
   an adapter concern.
-- Also exported for adapters: `notebookToolGuidelines`, `normalizeNotebookPath(rawPath, cwd)`.
+- Also exported for adapters: `notebookToolGuidelines`. Paths are used as given; resolving them
+  is the adapter's job, since each host defines cwd differently.
 
 Tools: `notebook_summary`, `notebook_create`, `notebook_read_cell`, `notebook_write_cell`,
 `notebook_change_cell_type`, `notebook_edit_cell`, `notebook_insert`, `notebook_delete`,
@@ -64,6 +67,8 @@ anchor id.
 - Table-driven registration: one `notebookTools` entry per core tool holding label, prompt
   snippet, render style; names/descriptions come from the core descriptors.
 - Shared tool semantics live once as namespaced guidelines on `notebook_summary`.
+- Relative paths resolve against `ctx.cwd`. No `@`-mention stripping (pi's own path tools still
+  do it via `stripAtPrefix`; current models don't need it).
 - Every tool runs under `withFileMutationQueue(normalizedPath, ...)` — reads too, since Pi
   executes tools in parallel.
 - Write/edit capture source before mutation and return diff details rendered with Pi's
@@ -75,8 +80,8 @@ anchor id.
 
 - Low-level SDK `Server` with `tools/list`/`tools/call`; typebox schemas pass through verbatim
   as `inputSchema`, args checked with `Value.Check`; failures return `isError` text.
-- Own per-file promise-chain queue, keyed on `realpath` so symlink aliases serialize together;
-  idle entries are dropped.
+- One global promise-chain queue: every tool call runs to completion before the next starts.
+  Calls are short single-file read-parse-writes, so this costs nothing and preserves call order.
 - Relative paths resolve against the server process startup cwd.
 - No resizer: images above 4MB base64 become omission notes.
 

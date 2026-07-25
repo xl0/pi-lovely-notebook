@@ -1,3 +1,4 @@
+import { isAbsolute, resolve } from "node:path"
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { generateDiffString, keyHint, renderDiff, resizeImage, withFileMutationQueue } from "@earendil-works/pi-coding-agent"
 import { Text } from "@earendil-works/pi-tui"
@@ -5,7 +6,6 @@ import {
 	applyExactSourceEdits,
 	loadNotebook,
 	type NotebookToolContent,
-	normalizeNotebookPath,
 	notebookChangeCellTypeTool,
 	notebookClearOutputsTool,
 	notebookCreateTool,
@@ -260,7 +260,8 @@ export default function notebookExtension(pi: ExtensionAPI) {
 						: renderNotebookTextResult(result, expanded, theme)
 			}),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const path = normalizeNotebookPath((params as { path: string }).path, ctx.cwd)
+				const rawPath = (params as { path: string }).path
+				const path = isAbsolute(rawPath) ? rawPath : resolve(ctx.cwd, rawPath)
 				const run = async (): Promise<NotebookToolRenderResult> => {
 					if (entry.renderResult !== "diff") return notebookToolResult(tool.run({ ...(params as object), path } as never))
 
