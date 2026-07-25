@@ -1,7 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
-import { keyHint, resizeImage, withFileMutationQueue } from "@earendil-works/pi-coding-agent"
+import { generateDiffString, keyHint, renderDiff, resizeImage, withFileMutationQueue } from "@earendil-works/pi-coding-agent"
 import { Text } from "@earendil-works/pi-tui"
 import {
+	applyExactSourceEdits,
+	loadNotebook,
 	type NotebookToolContent,
 	normalizeNotebookPath,
 	notebookChangeCellTypeTool,
@@ -17,7 +19,9 @@ import {
 	notebookReadOutputTool,
 	notebookSummaryTool,
 	notebookToolGuidelines,
-	notebookWriteCellTool
+	notebookWriteCellTool,
+	readCellAtIndex,
+	resolveCellIndex
 } from "@xl0/lovely-notebooks"
 
 type NotebookRenderTheme = Parameters<NonNullable<Parameters<ExtensionAPI["registerTool"]>[0]["renderCall"]>>[1]
@@ -37,7 +41,14 @@ type NotebookRenderArgs = {
 	includeImages?: boolean
 	language?: string
 }
-type NotebookToolRenderResult = { content: NotebookToolContent }
+type NotebookDiffDetails = ReturnType<typeof generateDiffString>
+type NotebookToolRenderResult = { content: NotebookToolContent; details: NotebookDiffDetails | undefined }
+type NotebookSourceMutationArgs = {
+	cellId?: string
+	index?: number
+	source?: string
+	edits?: Array<{ oldText: string; newText: string }>
+}
 
 // Core returns raw images; resize them into provider limits here, at the pi seam.
 export async function resolveContentImages(content: NotebookToolContent): Promise<NotebookToolContent> {
@@ -57,7 +68,7 @@ export async function resolveContentImages(content: NotebookToolContent): Promis
 	return resolved
 }
 
-async function notebookToolResult(content: Promise<NotebookToolContent>) {
+async function notebookToolResult(content: Promise<NotebookToolContent>): Promise<NotebookToolRenderResult> {
 	return { content: await resolveContentImages(await content), details: undefined }
 }
 
@@ -123,6 +134,19 @@ function renderNotebookTextResult(result: NotebookToolRenderResult, expanded: bo
 	return new Text(text, 0, 0)
 }
 
+function renderNotebookDiffResult(result: NotebookToolRenderResult, expanded: boolean, theme: NotebookRenderTheme): Text {
+	return result.details?.diff ? new Text(renderDiff(result.details.diff), 0, 0) : renderNotebookTextResult(result, expanded, theme)
+}
+
+async function readSelectedCellSource(path: string, args: NotebookSourceMutationArgs): Promise<string> {
+	if ((args.cellId === undefined) === (args.index === undefined)) throw new Error("Provide exactly one cell selector: cellId or index")
+	const notebook = await loadNotebook(path)
+	if (args.cellId !== undefined) return readCellAtIndex(notebook, resolveCellIndex(notebook, { cellId: args.cellId })).source
+	if (args.index === undefined) throw new Error("Provide exactly one cell selector: cellId or index")
+	const index = resolveCellIndex(notebook, { index: args.index })
+	return readCellAtIndex(notebook, index).source
+}
+
 type AnyNotebookTool = {
 	name: string
 	description: string
@@ -136,7 +160,7 @@ type NotebookToolEntry = {
 	label: string
 	promptSnippet: string
 	readStyleRender?: boolean
-	renderResult?: boolean
+	renderResult?: "text" | "diff"
 	promptGuidelines?: string[]
 }
 
@@ -146,7 +170,7 @@ const notebookTools: NotebookToolEntry[] = [
 		label: "Notebook Summary",
 		promptSnippet: "Discover existing cells",
 		readStyleRender: true,
-		renderResult: true,
+		renderResult: "text",
 		// Shared semantics live once, namespaced on notebook_summary, so deduped
 		// system-prompt guidance keeps notebook scope clear.
 		promptGuidelines: notebookToolGuidelines
@@ -165,7 +189,8 @@ const notebookTools: NotebookToolEntry[] = [
 	{
 		tool: notebookWriteCellTool,
 		label: "Notebook Write Cell",
-		promptSnippet: "Replace one notebook cell source, optionally changing its type."
+		promptSnippet: "Replace one notebook cell source, optionally changing its type.",
+		renderResult: "diff"
 	},
 	{
 		tool: notebookChangeCellTypeTool,
@@ -175,7 +200,8 @@ const notebookTools: NotebookToolEntry[] = [
 	{
 		tool: notebookEditCellTool,
 		label: "Notebook Edit Cell",
-		promptSnippet: "Edit part of one notebook cell with exact text replacements."
+		promptSnippet: "Edit part of one notebook cell with exact text replacements.",
+		renderResult: "diff"
 	},
 	{
 		tool: notebookInsertTool,
@@ -230,11 +256,23 @@ export default function notebookExtension(pi: ExtensionAPI) {
 					: renderNotebookCall(tool.name, args as NotebookRenderArgs, theme),
 			...(entry.renderResult && {
 				renderResult: (result: NotebookToolRenderResult, { expanded }: { expanded: boolean }, theme: NotebookRenderTheme) =>
-					renderNotebookTextResult(result, expanded, theme)
+					entry.renderResult === "diff"
+						? renderNotebookDiffResult(result, expanded, theme)
+						: renderNotebookTextResult(result, expanded, theme)
 			}),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const path = normalizeNotebookPath((params as { path: string }).path, ctx.cwd)
-				const run = () => notebookToolResult(tool.run({ ...(params as object), path } as never))
+				const run = async (): Promise<NotebookToolRenderResult> => {
+					if (entry.renderResult !== "diff") return notebookToolResult(tool.run({ ...(params as object), path } as never))
+
+					const args = params as NotebookSourceMutationArgs
+					const before = await readSelectedCellSource(path, args)
+					const after =
+						tool === notebookWriteCellTool ? args.source : args.edits === undefined ? undefined : applyExactSourceEdits(before, args.edits)
+					if (after === undefined) throw new Error(`Missing source mutation arguments for ${tool.name}`)
+					const content = await resolveContentImages(await tool.run({ ...(params as object), path } as never))
+					return { content, details: generateDiffString(before, after) }
+				}
 				return tool.mutates ? withFileMutationQueue(path, run) : run()
 			}
 		})

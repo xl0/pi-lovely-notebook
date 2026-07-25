@@ -22,6 +22,7 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
   - shared notebook-tool semantics live once on `notebook_summary` as namespaced guidelines (`notebookToolGuidelines` from core)
   - path normalization via core `normalizeNotebookPath`: strips leading `@`, resolves relative paths against `ctx.cwd`
   - mutation tools (per core `mutates` flag) run under `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
+  - write/edit capture cell source before mutation and return Pi-local diff details rendered with Pi's standard source diff UI
   - `resolveContentImages` resizes raw core images through Pi's `resizeImage`; unresizable images become `[Image omitted: ...]` notes
 - MCP server: `packages/mcp/src/server.ts` (run `bun packages/mcp/src/server.ts`, or the `lovely-notebooks-mcp` bin under bun).
   - low-level SDK `Server` with `tools/list`/`tools/call` handlers; typebox schemas are passed through verbatim as `inputSchema`
@@ -93,8 +94,9 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
   - `packages/core/test/notebook-*.tool.test.ts` keeps one file per tool for runner/output/selector behavior
   - `packages/core/test/notebook-*.workflow.test.ts` keeps one file per multi-step workflow (write→read parity, no-id mutation flow, real-fixture edit/save)
   - `packages/pi/test/resolve-content-images.test.ts` covers the Pi-side resize/omission seam against the corrupt fixture
+  - `packages/pi/test/source-diff.test.ts` covers write/edit cell-source diff details and rendering
   - `packages/mcp/test/file-queue.test.ts` covers serialization across real-path/symlink aliases
-  - current suite passes under `bun test` at repo root (82 tests)
+  - current suite passes under `bun test` at repo root (84 tests)
 - Local tool smoke runner: `bun run tool -- <tool-name> '<json-args>'` prints raw tool text output without launching Pi.
 - Biome config lives in `biome.json`.
   - schema migrated to match installed CLI `2.4.14`
@@ -116,7 +118,7 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
 
 ## Gaps
 
-- Pi/manual verification is still light; verification is tests, local `bun run tool` smoke runs, a stub-`ExtensionAPI` registration check, and a stdio JSON-RPC smoke session against the MCP server.
+- Pi/manual verification is still light; verification includes tests, direct Pi notebook summary/edit/write/read tool calls on a copied real fixture, local `bun run tool` smoke runs, a stub-`ExtensionAPI` registration check, and a stdio JSON-RPC smoke session against the MCP server.
 - MCP server is registered with Claude Code at local scope for dogfooding
   (`claude mcp add --scope local lovely-notebooks -- bun <repo>/packages/mcp/src/server.ts`, stored in `~/.claude/.claude.json`, not in the repo);
   `claude mcp list` reports it connected, but real host tool-call exercise is still pending.
