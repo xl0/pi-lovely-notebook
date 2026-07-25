@@ -1,4 +1,3 @@
-import { isAbsolute, resolve } from "node:path"
 import { type Static, type TUnsafe, Type } from "typebox"
 import type { Notebook } from "./notebook"
 import {
@@ -48,12 +47,6 @@ export const notebookToolGuidelines = [
 	"notebook_clear_outputs: preserves source and execution count."
 ]
 
-// Some models include a leading @ in path arguments; strip it like pi's built-in path tools do.
-export function normalizeNotebookPath(rawPath: string, cwd: string): string {
-	const stripped = rawPath.startsWith("@") ? rawPath.slice(1) : rawPath
-	return isAbsolute(stripped) ? stripped : resolve(cwd, stripped)
-}
-
 // String enum schema rendered as `type: "string"` + `enum`, not anyOf/const unions,
 // for providers (e.g. Google) that reject the latter.
 function StringEnum<T extends readonly string[]>(values: T, options?: { description?: string }): TUnsafe<T[number]> {
@@ -80,10 +73,9 @@ async function mutateNotebook<T>(path: string, mutate: (notebook: Notebook) => T
 }
 
 function resolveSelectedCellIndex(notebook: Notebook, cellId?: string, index?: number): number {
-	if ((cellId === undefined) === (index === undefined)) throw new Error("Provide exactly one cell selector: cellId or index")
-	if (cellId !== undefined) return resolveCellIndex(notebook, { cellId })
-	if (index === undefined) throw new Error("Provide exactly one cell selector: cellId or index")
-	return resolveCellIndex(notebook, { index })
+	if (cellId !== undefined && index === undefined) return resolveCellIndex(notebook, { cellId })
+	if (index !== undefined && cellId === undefined) return resolveCellIndex(notebook, { index })
+	throw new Error("Provide exactly one cell selector: cellId or index")
 }
 
 const notebookSummaryParams = Type.Object({
@@ -94,7 +86,7 @@ const notebookSummaryParams = Type.Object({
 
 async function runNotebookSummary(params: Static<typeof notebookSummaryParams>): Promise<NotebookToolContent> {
 	const notebook = await loadNotebook(params.path)
-	const summary = summarizeNotebook(params.path, notebook)
+	const summary = summarizeNotebook(notebook)
 	return [{ type: "text", text: sliceCellSource(formatNotebookSummary(summary), params.lineOffset, params.lineLimit) }]
 }
 
