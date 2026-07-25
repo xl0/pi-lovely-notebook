@@ -38,11 +38,12 @@ Runners return `NotebookToolContent` — an array of `{type:"text"}` / `{type:"i
 mimeType}`, MCP-shaped and structurally compatible with pi. Images come back as raw base64 at
 original size: capping or resizing is your adapter's job.
 
-Two more exports exist for adapters: `notebookToolGuidelines` (model-facing notes about
-selectors and tool semantics, worth surfacing once in your prompt or server instructions) and
-`normalizeNotebookPath(rawPath, cwd)` (strips a leading `@`, resolves against your cwd).
+One more export exists for adapters: `notebookToolGuidelines`, model-facing notes about selectors
+and tool semantics, worth surfacing once in your prompt or server instructions.
 
-Notebook files are not locked. If your host runs tools concurrently, serialize calls per file.
+Paths are used as given — resolve them against whatever your host calls the working directory
+before calling a runner. Notebook files are not locked either, so if your host runs tools
+concurrently, serialize calls per file.
 
 ## Notebook API
 

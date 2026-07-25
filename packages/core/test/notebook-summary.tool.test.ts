@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { normalizeNotebookPath, notebookSummaryTool } from "../src/tools"
+import { notebookSummaryTool } from "../src/tools"
 import { copyFixture, FIXTURE_DIR, firstText } from "./helpers"
 
 test("runNotebookSummary reports cleared outputs", async () => {
@@ -30,8 +30,4 @@ test("runNotebookSummary supports line slices", async () => {
 	})
 	expect(firstText(result)?.startsWith('<cell index="0" id="20735603" type="md"')).toBe(true)
 	expect(firstText(result)).toContain("Use offset=2 to continue.")
-})
-
-test("normalizeNotebookPath resolves relative paths against the supplied working directory", () => {
-	expect(normalizeNotebookPath("@notebooks/demo.ipynb", "/tmp/project")).toBe(join("/tmp/project", "notebooks/demo.ipynb"))
 })

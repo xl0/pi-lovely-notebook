@@ -25,7 +25,7 @@ import { createNotebookText, FIXTURE_DIR, readAllCells, readCellById } from "./h
 describe("notebook core", () => {
 	test("parse + summary", () => {
 		const notebook = parseNotebook(createNotebookText())
-		const summary = summarizeNotebook("demo.ipynb", notebook)
+		const summary = summarizeNotebook(notebook)
 
 		expect(summary.cellCount).toBe(2)
 		expect(summary.kernelName).toBe("python3")
@@ -34,21 +34,15 @@ describe("notebook core", () => {
 			index: 0,
 			id: "intro",
 			type: "markdown",
-			sourceLines: 3,
-			preview: "# Title\nMore text\n",
-			previewLines: 2,
-			previewTruncated: false,
-			previewRemainingLines: 0
+			sourceLines: 2,
+			preview: "# Title\nMore text\n"
 		})
 		expect(summary.cells[1]?.outputCount).toBe(1)
 		expect(summary.cells[1]?.outputs).toEqual([
 			{
 				index: 0,
 				type: "stream",
-				preview: "",
-				previewLines: 0,
-				previewTruncated: false,
-				previewRemainingLines: 0
+				preview: ""
 			}
 		])
 	})
@@ -127,6 +121,11 @@ describe("notebook core", () => {
 
 	test("applyExactSourceEdits rejects missing matches", () => {
 		expect(() => applyExactSourceEdits("abc", [{ oldText: "z", newText: "y" }])).toThrow('Edit text not found: "z"')
+	})
+
+	test("applyExactSourceEdits rejects empty oldText and no-op edits", () => {
+		expect(() => applyExactSourceEdits("abc", [{ oldText: "", newText: "y" }])).toThrow("edits[0].oldText must not be empty")
+		expect(() => applyExactSourceEdits("abc", [{ oldText: "b", newText: "b" }])).toThrow("No changes made")
 	})
 
 	test("applyExactSourceEdits rejects overlapping ranges", () => {
@@ -265,11 +264,11 @@ describe("notebook core", () => {
 	})
 
 	test("formatNotebookSummary uses xml-ish cell headers plus raw previews", () => {
-		const summary = summarizeNotebook("demo.ipynb", parseNotebook(createNotebookText()))
+		const summary = summarizeNotebook(parseNotebook(createNotebookText()))
 		const formatted = formatNotebookSummary(summary)
 		expect(formatted).toContain("meta nbformat=4.5 kernel=python3 cells=2 language=python")
-		expect(formatted).toContain('<cell index="0" id="intro" type="md" lines="3" />\n# Title\nMore text\n')
-		expect(formatted).toContain('<cell index="1" id="code-1" type="code" lines="3" n_exec="7" outputs="1" />')
+		expect(formatted).toContain('<cell index="0" id="intro" type="md" lines="2" />\n# Title\nMore text\n')
+		expect(formatted).toContain('<cell index="1" id="code-1" type="code" lines="2" n_exec="7" outputs="1" />')
 		expect(formatted).toContain('<output cell_id="code-1" index="0" type="stream" />')
 	})
 
@@ -281,8 +280,7 @@ describe("notebook core", () => {
 				cells: [{ cell_type: "markdown", id: "a" }]
 			})
 		)
-		expect(summarizeNotebook("empty.ipynb", notebook)).toEqual({
-			path: "empty.ipynb",
+		expect(summarizeNotebook(notebook)).toEqual({
 			nbformat: 4,
 			nbformatMinor: 2,
 			kernelName: null,
@@ -294,10 +292,7 @@ describe("notebook core", () => {
 					id: "a",
 					type: "markdown",
 					sourceLines: 0,
-					preview: "",
-					previewLines: 0,
-					previewTruncated: false,
-					previewRemainingLines: 0
+					preview: ""
 				}
 			]
 		})
@@ -311,11 +306,8 @@ describe("notebook core", () => {
 				cells: [{ cell_type: "markdown", id: "a", source: ["one\n", "two\n", "three\n", "four\n", "five\n", "six\n"] }]
 			})
 		)
-		const summary = summarizeNotebook("long.ipynb", notebook)
+		const summary = summarizeNotebook(notebook)
 		expect(summary.cells[0]?.preview).toBe("one\ntwo\nthree\nfour\nfive\n[1 more lines]")
-		expect(summary.cells[0]?.previewLines).toBe(5)
-		expect(summary.cells[0]?.previewTruncated).toBe(true)
-		expect(summary.cells[0]?.previewRemainingLines).toBe(1)
 		expect(formatNotebookSummary(summary)).toContain("five\n[1 more lines]")
 	})
 
@@ -342,7 +334,7 @@ describe("notebook core", () => {
 				]
 			})
 		)
-		const formatted = formatNotebookSummary(summarizeNotebook("demo.ipynb", notebook))
+		const formatted = formatNotebookSummary(summarizeNotebook(notebook))
 		expect(formatted).toContain('<output cell_id="c" index="0" type="stream" name="stdout" />\na\nb\nc\nd\ne\n[1 more lines]')
 		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="text/plain" n_exec="3" />\n42\n')
 		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="text/html" n_exec="3" />\n<b>42</b>')
@@ -423,7 +415,7 @@ describe("notebook core", () => {
 
 	test("loads real fixture with cell ids and mixed cell types", async () => {
 		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-history.ipynb"))
-		const summary = summarizeNotebook("lovely-history.ipynb", notebook)
+		const summary = summarizeNotebook(notebook)
 
 		expect(summary.nbformatMinor).toBe(5)
 		expect(summary.cellCount).toBe(12)
@@ -445,14 +437,14 @@ describe("notebook core", () => {
 
 	test("summary omits null execution counts from formatted rows", async () => {
 		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-history.ipynb"))
-		const formatted = formatNotebookSummary(summarizeNotebook("lovely-history.ipynb", notebook))
+		const formatted = formatNotebookSummary(summarizeNotebook(notebook))
 		expect(formatted).toContain('<cell index="1" id="57d6942b" type="code" lines="3" outputs="0" />')
 		expect(formatted).not.toContain("n_exec=null")
 	})
 
 	test("markdown preview escapes literal trailing backslashes and newlines", async () => {
 		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-history.ipynb"))
-		const summary = summarizeNotebook("lovely-history.ipynb", notebook)
+		const summary = summarizeNotebook(notebook)
 		const preview = summary.cells[7]?.preview ?? ""
 		const start = preview.indexOf("deleted it.")
 		expect(preview.slice(start, start + 11)).toBe("deleted it.")
@@ -460,7 +452,7 @@ describe("notebook core", () => {
 
 	test("real fixture without ids omits ids from summary and read", async () => {
 		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-test-no-ids.ipynb"))
-		const summary = summarizeNotebook("lovely-test-no-ids.ipynb", notebook)
+		const summary = summarizeNotebook(notebook)
 
 		expect(summary.nbformatMinor).toBe(2)
 		expect(summary.cellCount).toBe(2)

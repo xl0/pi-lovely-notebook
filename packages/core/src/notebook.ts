@@ -74,10 +74,8 @@ export interface NotebookOutputSummary {
 	mime?: string
 	ename?: string
 	executionCount?: number | null
+	/** Up to 5 lines of output text, ending in a `[N more lines]` marker when truncated. */
 	preview: string
-	previewLines: number
-	previewTruncated: boolean
-	previewRemainingLines: number
 }
 
 export interface NotebookCellSummary {
@@ -85,10 +83,8 @@ export interface NotebookCellSummary {
 	id?: string
 	type: string
 	sourceLines: number
+	/** Up to 5 lines of source, ending in a `[N more lines]` marker when truncated. */
 	preview: string
-	previewLines: number
-	previewTruncated: boolean
-	previewRemainingLines: number
 	executionCount?: number | null
 	outputCount?: number
 	outputs?: NotebookOutputSummary[]
@@ -96,7 +92,6 @@ export interface NotebookCellSummary {
 }
 
 export interface NotebookSummary {
-	path: string
 	nbformat: number
 	nbformatMinor: number
 	kernelName: string | null
@@ -169,17 +164,11 @@ function storedCellId(cell: NotebookCell): string | undefined {
 	return typeof cell.id === "string" && cell.id.length > 0 ? cell.id : undefined
 }
 
-function cellAt(notebook: Notebook, index: number): NotebookCell {
+/** Single bounds check for the whole module: every cell access goes through here. */
+function requireCell(notebook: Notebook, index: number): NotebookCell {
 	const cell = notebook.cells[index]
 	if (cell === undefined) throw new Error(`Cell index out of range: ${index}`)
 	return cell
-}
-
-function cellIndexFromUserIndex(notebook: Notebook, index: number): number {
-	if (!Number.isInteger(index) || index < 0 || index >= notebook.cells.length) {
-		throw new Error(`Cell index out of range: ${index}`)
-	}
-	return index
 }
 
 export function normalizeSource(source: unknown): string {
@@ -289,14 +278,13 @@ function sourceToLines(source: string): string[] {
 	return source.match(/[^\n]*\n|[^\n]+/g) ?? []
 }
 
-function previewSource(source: string): { text: string; lines: number; truncated: boolean; remainingLines: number } {
-	const maxLines = 5
+const PREVIEW_MAX_LINES = 5
+
+function previewSource(source: string): string {
 	const lines = sourceToLines(source)
-	const shownLines = lines.slice(0, maxLines)
-	const truncated = lines.length > maxLines
-	const remainingLines = Math.max(0, lines.length - shownLines.length)
-	const text = truncated ? `${shownLines.join("").replace(/\n?$/, "")}\n[${remainingLines} more lines]` : shownLines.join("")
-	return { text, lines: shownLines.length, truncated, remainingLines }
+	if (lines.length <= PREVIEW_MAX_LINES) return lines.join("")
+	const shown = lines.slice(0, PREVIEW_MAX_LINES).join("").replace(/\n?$/, "")
+	return `${shown}\n[${lines.length - PREVIEW_MAX_LINES} more lines]`
 }
 
 function normalizeOutputText(value: unknown): string {
@@ -335,61 +323,30 @@ function summarizeOutput(output: NotebookOutput, index: number): NotebookOutputS
 	}
 
 	if (type === "stream") {
-		const preview = previewSource(normalizeOutputText(raw.text))
-		return [
-			{
-				...base,
-				preview: preview.text,
-				previewLines: preview.lines,
-				previewTruncated: preview.truncated,
-				previewRemainingLines: preview.remainingLines
-			}
-		]
+		return [{ ...base, preview: previewSource(raw.text ?? "") }]
 	}
 
 	if ((type === "display_data" || type === "execute_result") && raw.data !== undefined) {
-		return displayDataEntries(raw.data).map(entry => {
-			const text = isTextLikeMime(entry.mime) ? entry.text : ""
-			const preview = previewSource(text)
-			return {
-				...base,
-				mime: entry.mime,
-				preview: preview.text,
-				previewLines: preview.lines,
-				previewTruncated: preview.truncated,
-				previewRemainingLines: preview.remainingLines
-			}
-		})
+		return displayDataEntries(raw.data).map(entry => ({
+			...base,
+			mime: entry.mime,
+			preview: previewSource(isTextLikeMime(entry.mime) ? entry.text : "")
+		}))
 	}
 
 	if (type === "error") {
-		const traceback = Array.isArray(raw.traceback) ? raw.traceback.filter((line): line is string => typeof line === "string") : []
-		let text = traceback.join("\n")
+		let text = (raw.traceback ?? []).join("\n")
 		if (text.length > 0 && !text.endsWith("\n")) text += "\n"
-		const preview = previewSource(text)
-		return [
-			{
-				...base,
-				preview: preview.text,
-				previewLines: preview.lines,
-				previewTruncated: preview.truncated,
-				previewRemainingLines: preview.remainingLines
-			}
-		]
+		return [{ ...base, preview: previewSource(text) }]
 	}
 
-	return [{ ...base, preview: "", previewLines: 0, previewTruncated: false, previewRemainingLines: 0 }]
+	return [{ ...base, preview: "" }]
 }
 
 function joinCellSources(a: string, b: string): string {
 	if (a.length === 0 || b.length === 0) return `${a}${b}`
 	if (a.endsWith("\n") || b.startsWith("\n")) return `${a}${b}`
 	return `${a}\n${b}`
-}
-
-function sourceLineCount(source: string): number {
-	if (source.length === 0) return 0
-	return source.split("\n").length
 }
 
 function createCellId(notebook: Notebook): string {
@@ -412,7 +369,10 @@ function readCell(cell: NotebookCell, index: number): NotebookReadCell {
 }
 
 export function resolveCellIndex(notebook: Notebook, selector: NotebookCellSelector): number {
-	if (selector.cellId === undefined) return cellIndexFromUserIndex(notebook, selector.index)
+	if (selector.cellId === undefined) {
+		requireCell(notebook, selector.index)
+		return selector.index
+	}
 
 	const index = notebook.cells.findIndex(cell => storedCellId(cell) === selector.cellId)
 	if (index === -1) throw new Error(`Cell not found: ${selector.cellId}`)
@@ -472,13 +432,12 @@ export function createNotebook(language = "python3"): Notebook {
 	}
 }
 
-export function summarizeNotebook(path: string, notebook: Notebook): NotebookSummary {
+export function summarizeNotebook(notebook: Notebook): NotebookSummary {
 	const metadata = notebook.metadata ?? {}
 	const kernelspec = metadata.kernelspec ?? {}
 	const languageInfo = metadata.language_info ?? {}
 
 	return {
-		path,
 		nbformat: notebook.nbformat,
 		nbformatMinor: notebook.nbformat_minor,
 		kernelName: typeof kernelspec.name === "string" ? kernelspec.name : null,
@@ -491,16 +450,12 @@ export function summarizeNotebook(path: string, notebook: Notebook): NotebookSum
 			const outputs = cell.cell_type === "code" && Array.isArray(cell.outputs) ? cell.outputs.flatMap(summarizeOutput) : undefined
 			const outputCount = cell.cell_type === "code" ? (Array.isArray(cell.outputs) ? cell.outputs.length : 0) : undefined
 			const attachmentKeys = isObject(cell.attachments) ? Object.keys(cell.attachments) : undefined
-			const preview = previewSource(source)
 			return {
 				index,
 				...(id === undefined ? {} : { id }),
 				type: cell.cell_type,
-				sourceLines: sourceLineCount(source),
-				preview: preview.text,
-				previewLines: preview.lines,
-				previewTruncated: preview.truncated,
-				previewRemainingLines: preview.remainingLines,
+				sourceLines: sourceToLines(source).length,
+				preview: previewSource(source),
 				...(executionCount === undefined ? {} : { executionCount }),
 				...(outputCount === undefined ? {} : { outputCount }),
 				...(outputs === undefined ? {} : { outputs }),
@@ -570,11 +525,11 @@ export function sliceCellSource(source: string, lineOffset = 0, lineLimit?: numb
 }
 
 export function readCellAtIndex(notebook: Notebook, cellIndex: number): NotebookReadCell {
-	return readCell(cellAt(notebook, cellIndex), cellIndex)
+	return readCell(requireCell(notebook, cellIndex), cellIndex)
 }
 
 export function writeCellSource(notebook: Notebook, cellIndex: number, source: string): Notebook {
-	const current = cellAt(notebook, cellIndex)
+	const current = requireCell(notebook, cellIndex)
 	notebook.cells[cellIndex] = {
 		...current,
 		source
@@ -583,7 +538,7 @@ export function writeCellSource(notebook: Notebook, cellIndex: number, source: s
 }
 
 export function changeCellType(notebook: Notebook, cellIndex: number, type: NotebookCellType): NotebookReadCell {
-	const cell = cellAt(notebook, cellIndex)
+	const cell = requireCell(notebook, cellIndex)
 	if (cell.cell_type === type) return readCell(cell, cellIndex)
 
 	cell.cell_type = type
@@ -608,32 +563,32 @@ function findUniqueMatch(haystack: string, needle: string): { start: number; end
 	return { start, end: start + needle.length }
 }
 
+/**
+ * Apply exact replacements, all matched against the original source.
+ * Mirrors pi's edit tool: unique matches, no empty `oldText`, no overlaps, must change something.
+ * Unlike pi, matching is exact only — no whitespace-fuzzy fallback.
+ */
 export function applyExactSourceEdits(source: string, edits: NotebookSourceEdit[]): string {
-	const matches = edits.map(edit => ({ ...edit, ...findUniqueMatch(source, edit.oldText) }))
-	const sorted = [...matches].sort((a, b) => a.start - b.start)
-
-	for (let index = 1; index < sorted.length; index += 1) {
-		const current = sorted[index]
-		const previous = sorted[index - 1]
-		if (current === undefined || previous === undefined) throw new Error("Edit ranges overlap")
-		if (current.start < previous.end) {
-			throw new Error("Edit ranges overlap")
-		}
-	}
+	const matches = edits.map((edit, index) => {
+		if (edit.oldText.length === 0) throw new Error(`edits[${index}].oldText must not be empty`)
+		return { ...edit, ...findUniqueMatch(source, edit.oldText) }
+	})
 
 	let cursor = 0
 	let result = ""
-	for (const match of sorted) {
-		result += source.slice(cursor, match.start)
-		result += match.newText
+	for (const match of matches.sort((a, b) => a.start - b.start)) {
+		if (match.start < cursor) throw new Error("Edit ranges overlap")
+		result += source.slice(cursor, match.start) + match.newText
 		cursor = match.end
 	}
 	result += source.slice(cursor)
+
+	if (result === source) throw new Error("No changes made: the replacements produced identical content.")
 	return result
 }
 
 export function editCellSource(notebook: Notebook, cellIndex: number, edits: NotebookSourceEdit[]): Notebook {
-	const cell = cellAt(notebook, cellIndex)
+	const cell = requireCell(notebook, cellIndex)
 	notebook.cells[cellIndex] = {
 		...cell,
 		source: applyExactSourceEdits(cell.source, edits)
@@ -658,27 +613,25 @@ export function insertCell(notebook: Notebook, insertIndex: number, cell: Notebo
 	}
 
 	notebook.cells.splice(insertIndex, 0, nextCell)
-	return readCell(cellAt(notebook, insertIndex), insertIndex)
+	return readCell(requireCell(notebook, insertIndex), insertIndex)
 }
 
 export function deleteCell(notebook: Notebook, cellIndex: number): NotebookReadCell {
-	const deleted = readCell(cellAt(notebook, cellIndex), cellIndex)
+	const deleted = readCell(requireCell(notebook, cellIndex), cellIndex)
 	notebook.cells.splice(cellIndex, 1)
 	return deleted
 }
 
 export function moveCell(notebook: Notebook, fromIndex: number, targetIndex: number, direction: "before" | "after"): NotebookReadCell {
-	const movedCell = cellAt(notebook, fromIndex)
-	cellAt(notebook, targetIndex)
-	if (targetIndex === fromIndex) {
-		throw new Error("Cannot move a cell relative to itself")
-	}
+	const movedCell = requireCell(notebook, fromIndex)
+	if (targetIndex < 0 || targetIndex >= notebook.cells.length) throw new Error(`Cell index out of range: ${targetIndex}`)
+	if (targetIndex === fromIndex) throw new Error("Cannot move a cell relative to itself")
 
 	notebook.cells.splice(fromIndex, 1)
 	const anchorIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
 	const insertIndex = direction === "before" ? anchorIndex : anchorIndex + 1
 	notebook.cells.splice(insertIndex, 0, movedCell)
-	return readCell(cellAt(notebook, insertIndex), insertIndex)
+	return readCell(requireCell(notebook, insertIndex), insertIndex)
 }
 
 export function mergeCell(notebook: Notebook, anchorIndex: number, direction: "above" | "below"): NotebookMergeResult {
@@ -688,8 +641,8 @@ export function mergeCell(notebook: Notebook, anchorIndex: number, direction: "a
 		throw new Error(`No cell to merge ${direction} from index ${anchorIndex}`)
 	}
 
-	const anchor = cellAt(notebook, anchorIndex)
-	const other = cellAt(notebook, otherIndex)
+	const anchor = requireCell(notebook, anchorIndex)
+	const other = requireCell(notebook, otherIndex)
 	if (anchor.cell_type !== other.cell_type) {
 		throw new Error(`Cannot merge ${anchor.cell_type} cell with ${other.cell_type} cell`)
 	}
@@ -701,7 +654,7 @@ export function mergeCell(notebook: Notebook, anchorIndex: number, direction: "a
 	const mergedIndex = direction === "above" ? anchorIndex - 1 : anchorIndex
 
 	return {
-		merged: readCell(cellAt(notebook, mergedIndex), mergedIndex),
+		merged: readCell(requireCell(notebook, mergedIndex), mergedIndex),
 		removed: readCell(other, otherIndex)
 	}
 }
@@ -717,7 +670,7 @@ export interface NotebookReadOutput {
 }
 
 export function readCellOutput(notebook: Notebook, cellIndex: number, outputIndex: number, mime?: string): NotebookReadOutput {
-	const cellData = cellAt(notebook, cellIndex)
+	const cellData = requireCell(notebook, cellIndex)
 	const cellId = storedCellId(cellData)
 
 	if (cellData.cell_type !== "code") {
@@ -745,16 +698,15 @@ export function readCellOutput(notebook: Notebook, cellIndex: number, outputInde
 		return {
 			...base,
 			mime: "text/plain",
-			text: normalizeOutputText(raw.text)
+			text: raw.text ?? ""
 		}
 	}
 
 	if (outputType === "error") {
-		const traceback = Array.isArray(raw.traceback) ? raw.traceback.filter((line): line is string => typeof line === "string") : []
 		return {
 			...base,
 			mime: "text/plain",
-			text: traceback.join("\n")
+			text: (raw.traceback ?? []).join("\n")
 		}
 	}
 
@@ -798,11 +750,10 @@ export function readCellOutput(notebook: Notebook, cellIndex: number, outputInde
 		const isImage = isBinaryImageMime(selectedMime)
 
 		if (isImage) {
-			const data = normalizeOutputText(value)
 			return {
 				...base,
 				mime: selectedMime,
-				images: [{ mime: selectedMime, data }]
+				images: [{ mime: selectedMime, data: normalizeOutputText(value) }]
 			}
 		}
 
@@ -828,7 +779,7 @@ export function extractDataUriImages(source: string): { text: string; images: Ar
 }
 
 export function readCellAttachment(notebook: Notebook, cellIndex: number, key: string): { mime: string; data: string } {
-	const cellData = cellAt(notebook, cellIndex)
+	const cellData = requireCell(notebook, cellIndex)
 
 	const attachments = cellData.attachments
 	if (!isObject(attachments) || !(key in attachments)) {
@@ -854,8 +805,8 @@ export function readCellAttachment(notebook: Notebook, cellIndex: number, key: s
 }
 
 export function clearCellOutputs(notebook: Notebook, cellIndex: number): NotebookReadCell {
-	const current = cellAt(notebook, cellIndex)
+	const current = requireCell(notebook, cellIndex)
 	if (current.cell_type !== "code") throw new Error(`Cell is not code: index ${cellIndex}`)
 	notebook.cells[cellIndex] = { ...current, outputs: [] }
-	return readCell(cellAt(notebook, cellIndex), cellIndex)
+	return readCell(requireCell(notebook, cellIndex), cellIndex)
 }
