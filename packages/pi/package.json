@@ -1,5 +1,5 @@
 {
-	"name": "@xl0/pi-lovely-notebooks",
+	"name": "@xl0/pi-lovely-notebook",
 	"version": "0.1.0",
 	"keywords": [
 		"pi-package",
@@ -14,7 +14,7 @@
 		"extensions"
 	],
 	"dependencies": {
-		"@xl0/lovely-notebooks": "^0.1.0"
+		"@xl0/lovely-notebook": "^0.1.0"
 	},
 	"devDependencies": {
 		"@earendil-works/pi-coding-agent": "^0.80.10",

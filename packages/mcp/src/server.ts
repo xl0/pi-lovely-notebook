@@ -20,7 +20,7 @@ import {
 	notebookSummaryTool,
 	notebookToolGuidelines,
 	notebookWriteCellTool
-} from "@xl0/lovely-notebooks"
+} from "@xl0/lovely-notebook"
 import { Value } from "typebox/value"
 
 const notebookTools = [
@@ -77,7 +77,7 @@ function capImages(content: NotebookToolContent): NotebookToolContent {
 }
 
 const server = new Server(
-	{ name: "lovely-notebooks", version: "0.1.0" },
+	{ name: "lovely-notebook", version: "0.1.0" },
 	{
 		capabilities: { tools: {} },
 		instructions: notebookToolGuidelines.join("\n")

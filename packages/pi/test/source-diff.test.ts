@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { type ExtensionAPI, initTheme } from "@earendil-works/pi-coding-agent"
-import { loadNotebook } from "@xl0/lovely-notebooks"
+import { loadNotebook } from "@xl0/lovely-notebook"
 import notebookExtension from "../extensions/notebook"
 
 initTheme()

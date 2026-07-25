@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { notebookReadCellAttachmentTool } from "@xl0/lovely-notebooks"
+import { notebookReadCellAttachmentTool } from "@xl0/lovely-notebook"
 import { resolveContentImages } from "../extensions/notebook"
 
 const FIXTURE_DIR = join(import.meta.dir, "../../core/test/fixtures")

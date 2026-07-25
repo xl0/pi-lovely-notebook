@@ -12,7 +12,7 @@ import {
 	notebookReadOutputTool,
 	notebookSummaryTool,
 	notebookWriteCellTool
-} from "@xl0/lovely-notebooks"
+} from "@xl0/lovely-notebook"
 
 const runners = {
 	notebook_summary: notebookSummaryTool.run,

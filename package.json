@@ -18,7 +18,7 @@
 		"link:pi": "for p in ai:pi-ai coding-agent:pi-coding-agent tui:pi-tui; do rm -rf \"node_modules/@earendil-works/${p#*:}\" && ln -s \"$PWD/../pi-mono/packages/${p%%:*}\" \"node_modules/@earendil-works/${p#*:}\"; done"
 	},
 	"devDependencies": {
-		"@xl0/lovely-notebooks": "^0.1.0",
+		"@xl0/lovely-notebook": "^0.1.0",
 		"@biomejs/biome": "^2.4.14",
 		"@typescript/native-preview": "^7.0.0-dev.20260502.1",
 		"bun-types": "^1.3.13"

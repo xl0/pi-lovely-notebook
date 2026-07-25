@@ -5,9 +5,9 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
 ## Current state
 
 - Repo is a bun workspace monorepo (`workspaces: ["packages/*"]`):
-  - `packages/core` (`@xl0/lovely-notebooks`): publishable notebook JSON logic + adapter-neutral tool layer; only runtime dep is `typebox` (peer)
-  - `packages/pi` (`@xl0/pi-lovely-notebooks`): publishable Pi adapter; depends on core plus Pi peers
-  - `packages/mcp` (`@xl0/lovely-notebooks-mcp`): publishable local stdio MCP adapter; depends on core, `@modelcontextprotocol/sdk`, and `typebox`
+  - `packages/core` (`@xl0/lovely-notebook`): publishable notebook JSON logic + adapter-neutral tool layer; only runtime dep is `typebox` (peer)
+  - `packages/pi` (`@xl0/pi-lovely-notebook`): publishable Pi adapter; depends on core plus Pi peers
+  - `packages/mcp` (`@xl0/lovely-notebook-mcp`): publishable local stdio MCP adapter; depends on core, `@modelcontextprotocol/sdk`, and `typebox`
 - All three packages install independently under the `@xl0` npm scope; thin adapters keep Pi and MCP dependency trees isolated.
 - Root `package.json` keeps `pi.extensions: ["./packages/pi/extensions"]` so Pi sessions in this repo load the extension for dogfooding.
 - Dependency handling:
@@ -24,7 +24,7 @@ Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a
   - mutation tools (per core `mutates` flag) run under `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
   - write/edit capture cell source before mutation and return Pi-local diff details rendered with Pi's standard source diff UI
   - `resolveContentImages` resizes raw core images through Pi's `resizeImage`; unresizable images become `[Image omitted: ...]` notes
-- MCP server: `packages/mcp/src/server.ts` (run `bun packages/mcp/src/server.ts`, or the `lovely-notebooks-mcp` bin under bun).
+- MCP server: `packages/mcp/src/server.ts` (run `bun packages/mcp/src/server.ts`, or the `lovely-notebook-mcp` bin under bun).
   - low-level SDK `Server` with `tools/list`/`tools/call` handlers; typebox schemas are passed through verbatim as `inputSchema`
   - args validated with typebox `Value.Check`; validation failures and thrown tool errors return `isError` text results
   - per-file promise-chain queue serializes mutations (MCP hosts may call tools concurrently), canonicalizes existing paths through `realpath`, and removes idle queue entries
