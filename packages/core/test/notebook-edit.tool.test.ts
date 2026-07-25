@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import { notebookEditCellTool } from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookEditCellTool } from "../src/tools"
 import { copyFixture, firstText, readAllCells } from "./helpers"
 
 test("runNotebookEditCell works by index on notebooks without ids", async () => {

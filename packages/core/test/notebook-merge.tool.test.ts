@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { notebookMergeTool, notebookReadCellTool } from "../extensions/notebook/tools"
+import { notebookMergeTool, notebookReadCellTool } from "../src/tools"
 import { copyFixture, firstText } from "./helpers"
 
 test("runNotebookMerge returns concise confirmation and merged source", async () => {

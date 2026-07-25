@@ -1,38 +1,51 @@
-# Pi notebook package
+# Pi notebook monorepo
 
-Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection and editing.
+Goal: notebook tools for safe `.ipynb` inspection and editing, exposed both as a Pi package and as a local MCP server over a shared core.
 
 ## Current state
 
-- Repo root is now the Pi package.
-- `package.json` declares a Pi package via `pi.extensions: ["./extensions"]`.
-  - Pi core imports stay in `peerDependencies` with `"*"` ranges per Pi package docs, so installed packages use Pi's bundled core modules
-  - local development resolves those same Pi packages through `devDependencies` using `file:../pi-mono/packages/*` instead of manual npm/bun links
-  - `typebox` is treated like Pi core: `peerDependencies` for runtime, `devDependencies` for local typechecking
-  - typechecking uses `@typescript/native-preview` (`tsgo`); no separate `typescript` package is needed
-  - `bun-types` remains a dev dependency and is listed in `tsconfig.json` because tests import `bun:test` and helpers use Bun APIs
-- Main extension entry: `extensions/notebook/index.ts`.
-  - every notebook tool now has a short prompt snippet for discoverability
+- Repo is a bun workspace monorepo (`workspaces: ["packages/*"]`):
+  - `packages/core` (`@xl0/lovely-notebooks`): publishable notebook JSON logic + adapter-neutral tool layer; only runtime dep is `typebox` (peer)
+  - `packages/pi` (`@xl0/pi-lovely-notebooks`): publishable Pi adapter; depends on core plus Pi peers
+  - `packages/mcp` (`@xl0/lovely-notebooks-mcp`): publishable local stdio MCP adapter; depends on core, `@modelcontextprotocol/sdk`, and `typebox`
+- All three packages install independently under the `@xl0` npm scope; thin adapters keep Pi and MCP dependency trees isolated.
+- Root `package.json` keeps `pi.extensions: ["./packages/pi/extensions"]` so Pi sessions in this repo load the extension for dogfooding.
+- Dependency handling:
+  - imported Pi core packages stay in `peerDependencies` with `"*"` ranges in `packages/pi` per Pi package docs; registry `pi-coding-agent` and `pi-tui` `^0.80.10` packages sit in devDependencies for typechecking
+  - `bun run link:pi` overlays `node_modules/@earendil-works/*` with symlinks to `../pi-mono/packages/*` (npm link cannot parse bun workspace trees, so the script does raw `rm`+`ln -s`; rerun after `bun install`)
+  - `bunfig.toml` pins `linker = "hoisted"` (flat node_modules) so the link overlay has one target location
+  - `typebox` is pinned to `1.1.38` exactly (core devDep, `packages/mcp` dep, peer `"*"` in core and `packages/pi`): matches the version pi bundles, so the extension develops against what it runs on, and hoisting unifies with the linked pi-mono packages' exact pin (a different root version makes `bun install` try nested installs inside the read-only link targets)
+  - root devDependencies hold only repo-wide tooling (`biome`, `tsgo`, `bun-types`) plus core for `scripts/`; `bun-types` because tests import `bun:test` and helpers use Bun APIs
+- Pi extension entry: `packages/pi/extensions/notebook/index.ts`.
+  - table-driven registration: one `notebookTools` entry per core tool holding label, prompt snippet, and render style; tool names/descriptions come from core descriptors
   - every notebook tool has compact TUI call rendering that shows selected args; summary has a collapsed text preview with expand hint
-  - shared notebook-tool semantics live once on `notebook_summary` as namespaced guidelines, so deduped system-prompt guidance keeps notebook scope clear
-  - path normalization at the adapter seam: strips leading `@`, resolves relative paths against `ctx.cwd`
-  - all mutation tools are wrapped in `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
-  - read-only tools are unqueued but still get path normalization
-- Pure notebook logic lives in `extensions/notebook/notebook.ts`.
+  - shared notebook-tool semantics live once on `notebook_summary` as namespaced guidelines (`notebookToolGuidelines` from core)
+  - path normalization via core `normalizeNotebookPath`: strips leading `@`, resolves relative paths against `ctx.cwd`
+  - mutation tools (per core `mutates` flag) run under `withFileMutationQueue(normalizedPath, ...)` for correctness under Pi's parallel tool execution
+  - `resolveContentImages` resizes raw core images through Pi's `resizeImage`; unresizable images become `[Image omitted: ...]` notes
+- MCP server: `packages/mcp/src/server.ts` (run `bun packages/mcp/src/server.ts`, or the `lovely-notebooks-mcp` bin under bun).
+  - low-level SDK `Server` with `tools/list`/`tools/call` handlers; typebox schemas are passed through verbatim as `inputSchema`
+  - args validated with typebox `Value.Check`; validation failures and thrown tool errors return `isError` text results
+  - per-file promise-chain queue serializes mutations (MCP hosts may call tools concurrently), canonicalizes existing paths through `realpath`, and removes idle queue entries
+  - relative paths resolve against the MCP server process startup cwd inherited from its launcher
+  - no image resizer in the MCP build: images above 4MB base64 are replaced with omission notes
+- Pure notebook logic lives in `packages/core/src/notebook.ts`.
   - exported functions: parseNotebook, loadNotebook, saveNotebook, createNotebook, summarizeNotebook, formatNotebookSummary, readCellAtIndex, resolveCellIndex, sliceCellSource, writeCellSource, changeCellType, editCellSource, applyExactSourceEdits, insertCell, deleteCell, moveCell, mergeCell, clearCellOutputs, readCellOutput, readCellAttachment, extractDataUriImages, normalizeSource
   - `readCellsById` and `readCellRange` removed from public interface (unused by any tool)
   - tool-layer selectors resolve to 0-based cell indexes at the boundary; core mutation/read helpers operate on indexes only
   - display-data MIME splitting/normalization is centralized in one internal helper shared by output summaries and output reads
-- Shared tool runners + schemas live in `extensions/notebook/tools.ts`.
-  - string-valued enum parameters use Pi-recommended `StringEnum` schemas so providers see `type: "string"` plus `enum`, not `anyOf`/`const` unions
+- Shared tool runners + schemas live in `packages/core/src/tools.ts`; `src/index.ts` re-exports tools + notebook core as the package entry.
+  - string-valued enum parameters use a local `StringEnum` helper so providers see `type: "string"` plus `enum`, not `anyOf`/`const` unions
   - index parameters are schema-bounded as non-negative integers, except `notebook_insert.index` also accepts `-1` for append
   - each params schema/type is colocated with its matching runner; no schemas are shared across tools
-  - each tool exports a `{ params, run }` descriptor so extension registration and tests use one public symbol per tool
-  - internal runner functions return `AgentToolResult["content"]` only; extension glue wraps content with empty `details`
+  - each tool exports a `{ name, description, mutates, params, run }` descriptor; adapters and tests use one public symbol per tool
+  - runners return core-local `NotebookToolContent` (`{type:"text"}` / `{type:"image", data, mimeType}`), MCP-shaped and structurally Pi-compatible
+  - core returns images raw (base64, unresized); resizing/capping is an adapter concern
+  - `notebookToolGuidelines` and `normalizeNotebookPath(rawPath, cwd)` are exported for adapters
   - internal `mutateNotebook(path, mutate)` helper consolidates load → mutate → save for all mutation runners
   - selection helpers keep cellId/index validation, resolution, and confirmation text formatting in the tool layer
 - Implemented tools:
-  - `notebook_summary({ path })`
+  - `notebook_summary({ path, lineOffset?, lineLimit? })`
   - `notebook_create({ path, language? })`
   - `notebook_read_cell({ path, cellId?|index?, lineOffset?, lineLimit?, includeImages? })`
   - `notebook_write_cell({ path, cellId?|index?, type?, source })`
@@ -52,7 +65,7 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - cell metadata is normalized to a typed JSON object internally
   - attachment containers are normalized to typed MIME bundles internally; attachment MIME values remain JSON values
   - code-cell outputs are normalized to typed output unions internally and validated for known nbformat output types; unknown output fields are preserved on save
-  - summarize kernel/language/cells via one `meta` line plus one pseudo-XML cell header per cell
+  - summarize kernel/language/cells via one `meta` line plus one pseudo-XML cell header per cell; formatted summary supports optional line offset/limit pagination
   - summary/read omit `id` when the notebook cell has no stored id
   - code cell summary headers include `n_exec` only when execution count is present
   - summary preview is raw source text after each cell header, hard-limited to 5 lines; when truncated, it ends with a final `[N more lines]` line
@@ -71,15 +84,17 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
   - read one output by 0-based index from a code cell; returns text for text-like mimes, image for binary image mimes (image/png, image/jpeg, etc.); image/svg+xml is returned as text; when `mime` is omitted on rich outputs, all displayable text and images are returned together unless `includeImages: false`
   - read one image attachment from a cell by key; returns image content
   - `notebook_read_cell` on markdown cells extracts `data:` URI images: replaces them with `[image: mime/type]` markers in text and returns decoded images as `ImageContent` items unless `includeImages: false`
-  - image-returning tool paths run through Pi's inline image resizer; images that cannot be resized into provider limits become text omission notes instead of `ImageContent`
-  - `test/fixtures/subtly-corrupt-images.ipynb` covers valid-looking PNG base64 whose IDAT payload is not decodable, across inline markdown, output, and attachment paths
+  - image-returning tool paths: Pi adapter runs Pi's inline image resizer (unresizable → omission note); MCP adapter caps at 4MB base64
+  - `packages/core/test/fixtures/subtly-corrupt-images.ipynb` covers valid-looking PNG base64 whose IDAT payload is not decodable; core passes such images through raw, the Pi adapter test asserts they become omission notes
   - `notebook_summary` lists attachment keys in cell headers via `atts="key1 key2"` attribute
   - save path rewrites notebook JSON in Jupyter-style formatting: source as `string[]`, 1-space JSON indentation, trailing newline
 - Tests split by layer:
-  - `test/notebook-core.test.ts` covers parse/validation, pure cell ops, formatting helpers, load/save roundtrips, save formatting, and fixture-level core behavior
-  - `test/notebook-*.tool.test.ts` keeps one file per tool for runner/output/selector behavior
-  - `test/notebook-*.workflow.test.ts` keeps one file per multi-step workflow (write→read parity, no-id mutation flow, real-fixture edit/save)
-  - current suite passes under `bun test` (77 tests)
+  - `packages/core/test/notebook-core.test.ts` covers parse/validation, pure cell ops, formatting helpers, load/save roundtrips, save formatting, and fixture-level core behavior
+  - `packages/core/test/notebook-*.tool.test.ts` keeps one file per tool for runner/output/selector behavior
+  - `packages/core/test/notebook-*.workflow.test.ts` keeps one file per multi-step workflow (write→read parity, no-id mutation flow, real-fixture edit/save)
+  - `packages/pi/test/resolve-content-images.test.ts` covers the Pi-side resize/omission seam against the corrupt fixture
+  - `packages/mcp/test/file-queue.test.ts` covers serialization across real-path/symlink aliases
+  - current suite passes under `bun test` at repo root (82 tests)
 - Local tool smoke runner: `bun run tool -- <tool-name> '<json-args>'` prints raw tool text output without launching Pi.
 - Biome config lives in `biome.json`.
   - schema migrated to match installed CLI `2.4.14`
@@ -93,21 +108,25 @@ Goal: Pi package exposing notebook-focused tools for safe `.ipynb` inspection an
 
 ## Decisions
 
-- Package form: root-level Pi package, not only project-local `.pi/extensions`.
-- Keep notebook operations in pure functions, extension glue thin.
+- Package form: bun workspace monorepo; core, Pi adapter, and MCP server are separate packages shipped independently.
+- Publish core once; keep Pi and MCP as thin packages with versioned core dependencies so their unrelated runtime dependencies stay isolated.
+- Keep notebook operations in pure functions, adapter glue thin; core stays free of Pi and MCP imports.
 - Start with small tool slices: read-only first, then mutation tools.
 - No extra runtime deps for notebook parsing; use built-in JSON handling.
 
 ## Gaps
 
-- Pi/manual verification is still light; most verification so far is tests plus local `bun run tool` smoke runs on real fixtures.
+- Pi/manual verification is still light; verification is tests, local `bun run tool` smoke runs, a stub-`ExtensionAPI` registration check, and a stdio JSON-RPC smoke session against the MCP server.
+- MCP server is registered with Claude Code at local scope for dogfooding
+  (`claude mcp add --scope local lovely-notebooks -- bun <repo>/packages/mcp/src/server.ts`, stored in `~/.claude/.claude.json`, not in the repo);
+  `claude mcp list` reports it connected, but real host tool-call exercise is still pending.
 - `check` now runs type-checking plus Biome (`bun run typecheck && bun run biome:check`).
 - `bun-types` is now installed and type-checking uses it directly.
 - Notebook parse/summary/mutation code now satisfies stricter TS + current Biome without non-null assertions.
 - Validation errors from Pi surface raw schema-validator messages instead of friendly allowed-value hints.
 - Save/mutation path still normalizes notebook JSON shape/format on write, even though it now aims to match common Jupyter formatting.
 - Mutation tools on no-id notebooks rely on index selectors; ids are not backfilled.
-- Real notebook fixtures live in `test/fixtures/`.
+- Real notebook fixtures live in `packages/core/test/fixtures/`.
 - `PLAN.md` now holds the main actionable planning for adding VSCode/Jupyter-backed notebook execution through a same-repo companion bridge extension.
 - Path normalization, mutation queueing, and mutation orchestration helper all implemented.
 - `ensureCellIds`, `readCellsById`, and `readCellRange` removed from public interface.

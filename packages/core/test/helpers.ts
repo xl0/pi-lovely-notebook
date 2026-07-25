@@ -1,8 +1,8 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type Notebook, type NotebookReadCell, readCellAtIndex, resolveCellIndex } from "../extensions/notebook/notebook"
-import type { NotebookToolContent } from "../extensions/notebook/tools"
+import { type Notebook, type NotebookReadCell, readCellAtIndex, resolveCellIndex } from "../src/notebook"
+import type { NotebookToolContent } from "../src/tools"
 
 export const FIXTURE_DIR = join(import.meta.dir, "fixtures")
 

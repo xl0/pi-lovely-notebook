@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import { notebookChangeCellTypeTool } from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookChangeCellTypeTool } from "../src/tools"
 import { copyFixture, firstText } from "./helpers"
 
 test("runNotebookChangeCellType changes a cell to code", async () => {

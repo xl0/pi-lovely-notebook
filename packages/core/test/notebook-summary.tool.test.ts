@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { notebookSummaryTool } from "../extensions/notebook/tools"
+import { normalizeNotebookPath, notebookSummaryTool } from "../src/tools"
 import { copyFixture, FIXTURE_DIR, firstText } from "./helpers"
 
 test("runNotebookSummary reports cleared outputs", async () => {
@@ -20,4 +20,18 @@ test("runNotebookSummary works on fixture path", async () => {
 	const result = await notebookSummaryTool.run({ path: join(FIXTURE_DIR, "lovely-history.ipynb") })
 	expect(firstText(result)).toContain('<cell index="0" id="20735603" type="md"')
 	expect(firstText(result)).toContain('<output cell_id="4ea6855e" index="0" type="stream" name="stdout" />')
+})
+
+test("runNotebookSummary supports line slices", async () => {
+	const result = await notebookSummaryTool.run({
+		path: join(FIXTURE_DIR, "lovely-history.ipynb"),
+		lineOffset: 1,
+		lineLimit: 1
+	})
+	expect(firstText(result)?.startsWith('<cell index="0" id="20735603" type="md"')).toBe(true)
+	expect(firstText(result)).toContain("Use offset=2 to continue.")
+})
+
+test("normalizeNotebookPath resolves relative paths against the supplied working directory", () => {
+	expect(normalizeNotebookPath("@notebooks/demo.ipynb", "/tmp/project")).toBe(join("/tmp/project", "notebooks/demo.ipynb"))
 })

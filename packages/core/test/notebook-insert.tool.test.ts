@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFile } from "node:fs/promises"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import { notebookInsertTool, notebookReadCellTool } from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookInsertTool, notebookReadCellTool } from "../src/tools"
 import { copyFixture, createTempNotebook, firstText } from "./helpers"
 
 test("runNotebookInsert returns concise confirmation and inserts readable cell", async () => {

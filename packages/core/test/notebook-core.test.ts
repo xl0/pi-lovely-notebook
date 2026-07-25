@@ -19,7 +19,7 @@ import {
 	sliceCellSource,
 	summarizeNotebook,
 	writeCellSource
-} from "../extensions/notebook/notebook"
+} from "../src/notebook"
 import { createNotebookText, FIXTURE_DIR, readAllCells, readCellById } from "./helpers"
 
 describe("notebook core", () => {

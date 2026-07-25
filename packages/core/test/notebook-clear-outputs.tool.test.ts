@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import { notebookClearOutputsTool, notebookSummaryTool } from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookClearOutputsTool, notebookSummaryTool } from "../src/tools"
 import { copyFixture, firstText, readAllCells } from "./helpers"
 
 test("runNotebookClearOutputs returns concise confirmation and clears outputs", async () => {

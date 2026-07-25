@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { notebookReadOutputTool } from "../extensions/notebook/tools"
+import { notebookReadOutputTool } from "../src/tools"
 import { FIXTURE_DIR, firstText } from "./helpers"
 
 test("runNotebookReadOutput uses 0-based output indices", async () => {
@@ -11,14 +11,16 @@ test("runNotebookReadOutput uses 0-based output indices", async () => {
 	await expect(notebookReadOutputTool.run({ path, index: 4, outputIndex: -1 })).rejects.toThrow("Output index out of range: -1")
 })
 
-test("runNotebookReadOutput omits subtly corrupted image outputs", async () => {
+test("runNotebookReadOutput returns raw image outputs", async () => {
 	const result = await notebookReadOutputTool.run({
 		path: join(FIXTURE_DIR, "subtly-corrupt-images.ipynb"),
 		cellId: "corrupt-output",
 		outputIndex: 0,
 		mime: "image/png"
 	})
-	expect(result).toEqual([{ type: "text", text: "[Image omitted: could not be resized below the inline image size limit.]" }])
+	expect(result).toHaveLength(1)
+	expect(result[0]?.type).toBe("image")
+	expect(result[0]?.type === "image" && result[0].mimeType).toBe("image/png")
 })
 
 test("runNotebookReadOutput can omit image content", async () => {

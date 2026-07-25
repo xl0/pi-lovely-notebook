@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { editCellSource, loadNotebook, saveNotebook } from "../extensions/notebook/notebook"
+import { editCellSource, loadNotebook, saveNotebook } from "../src/notebook"
 import { copyFixture, readCellById } from "./helpers"
 
 test("reads and edits a real fixture cell while preserving outputs", async () => {

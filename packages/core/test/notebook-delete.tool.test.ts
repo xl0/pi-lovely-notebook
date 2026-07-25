@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { notebookDeleteTool, notebookReadCellTool } from "../extensions/notebook/tools"
+import { notebookDeleteTool, notebookReadCellTool } from "../src/tools"
 import { copyFixture, firstText } from "./helpers"
 
 test("runNotebookDelete returns concise confirmation and removes the cell", async () => {

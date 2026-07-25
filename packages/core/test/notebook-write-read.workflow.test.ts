@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { notebookReadCellTool, notebookWriteCellTool } from "../extensions/notebook/tools"
+import { notebookReadCellTool, notebookWriteCellTool } from "../src/tools"
 import { copyFixture, firstText } from "./helpers"
 
 test("code write then read preserves exact source", async () => {
