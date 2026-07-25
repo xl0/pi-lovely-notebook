@@ -101,7 +101,6 @@ async function runNotebookSummary(params: Static<typeof notebookSummaryParams>):
 export const notebookSummaryTool = {
 	name: "notebook_summary",
 	description: "Summarize a Jupyter notebook by cell.",
-	mutates: false,
 	params: notebookSummaryParams,
 	run: runNotebookSummary
 } as const
@@ -120,7 +119,6 @@ async function runNotebookCreate(params: Static<typeof notebookCreateParams>): P
 export const notebookCreateTool = {
 	name: "notebook_create",
 	description: "Create a new empty Jupyter notebook.",
-	mutates: true,
 	params: notebookCreateParams,
 	run: runNotebookCreate
 } as const
@@ -156,7 +154,6 @@ async function runNotebookReadCell(params: Static<typeof notebookReadCellParams>
 export const notebookReadCellTool = {
 	name: "notebook_read_cell",
 	description: "Read one notebook cell source.",
-	mutates: false,
 	params: notebookReadCellParams,
 	run: runNotebookReadCell
 } as const
@@ -182,7 +179,6 @@ async function runNotebookWriteCell(params: Static<typeof notebookWriteCellParam
 export const notebookWriteCellTool = {
 	name: "notebook_write_cell",
 	description: "Replace one notebook cell source and optionally change its type.",
-	mutates: true,
 	params: notebookWriteCellParams,
 	run: runNotebookWriteCell
 } as const
@@ -209,7 +205,6 @@ async function runNotebookChangeCellType(params: Static<typeof notebookChangeCel
 export const notebookChangeCellTypeTool = {
 	name: "notebook_change_cell_type",
 	description: "Change one notebook cell type.",
-	mutates: true,
 	params: notebookChangeCellTypeParams,
 	run: runNotebookChangeCellType
 } as const
@@ -242,7 +237,6 @@ async function runNotebookEditCell(params: Static<typeof notebookEditCellParams>
 export const notebookEditCellTool = {
 	name: "notebook_edit_cell",
 	description: "Apply exact source replacements within one notebook cell.",
-	mutates: true,
 	params: notebookEditCellParams,
 	run: runNotebookEditCell
 } as const
@@ -277,7 +271,6 @@ async function runNotebookInsert(params: Static<typeof notebookInsertParams>): P
 export const notebookInsertTool = {
 	name: "notebook_insert",
 	description: "Insert one notebook cell near an anchor.",
-	mutates: true,
 	params: notebookInsertParams,
 	run: runNotebookInsert
 } as const
@@ -296,7 +289,6 @@ async function runNotebookDelete(params: Static<typeof notebookDeleteParams>): P
 export const notebookDeleteTool = {
 	name: "notebook_delete",
 	description: "Delete one notebook cell.",
-	mutates: true,
 	params: notebookDeleteParams,
 	run: runNotebookDelete
 } as const
@@ -332,7 +324,6 @@ async function runNotebookMove(params: Static<typeof notebookMoveParams>): Promi
 export const notebookMoveTool = {
 	name: "notebook_move",
 	description: "Move one notebook cell relative to another.",
-	mutates: true,
 	params: notebookMoveParams,
 	run: runNotebookMove
 } as const
@@ -359,7 +350,6 @@ async function runNotebookMerge(params: Static<typeof notebookMergeParams>): Pro
 export const notebookMergeTool = {
 	name: "notebook_merge",
 	description: "Merge one notebook cell with an adjacent cell.",
-	mutates: true,
 	params: notebookMergeParams,
 	run: runNotebookMerge
 } as const
@@ -403,7 +393,6 @@ async function runNotebookReadOutput(params: Static<typeof notebookReadOutputPar
 export const notebookReadOutputTool = {
 	name: "notebook_read_cell_output",
 	description: "Read one output from a code cell. Supports text and image outputs.",
-	mutates: false,
 	params: notebookReadOutputParams,
 	run: runNotebookReadOutput
 } as const
@@ -426,7 +415,6 @@ async function runNotebookReadCellAttachment(params: Static<typeof notebookReadC
 export const notebookReadCellAttachmentTool = {
 	name: "notebook_read_cell_attachment",
 	description: "Read an image attachment from a cell by its key.",
-	mutates: false,
 	params: notebookReadCellAttachmentParams,
 	run: runNotebookReadCellAttachment
 } as const
@@ -450,7 +438,6 @@ async function runNotebookClearOutputs(params: Static<typeof notebookClearOutput
 export const notebookClearOutputsTool = {
 	name: "notebook_clear_outputs",
 	description: "Clear outputs from one code cell.",
-	mutates: true,
 	params: notebookClearOutputsParams,
 	run: runNotebookClearOutputs
 } as const
