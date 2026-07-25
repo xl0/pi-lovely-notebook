@@ -24,11 +24,11 @@ Initial target: execute open VSCode notebooks/cells through the currently select
 ## Proposed repo layout
 
 ```txt
-packages/core/                       # @xl0/lovely-notebooks: shared published core (done)
-packages/pi/                         # @xl0/pi-lovely-notebooks: Pi adapter (done)
+packages/core/                       # @xl0/lovely-notebook: shared published core (done)
+packages/pi/                         # @xl0/pi-lovely-notebook: Pi adapter (done)
   extensions/notebook/index.ts       # register tools, rendering, resize, queueing
   extensions/notebook/vscode-bridge.ts  # (planned) Pi-side bridge discovery/client
-packages/mcp/                        # @xl0/lovely-notebooks-mcp: local stdio MCP server (done)
+packages/mcp/                        # @xl0/lovely-notebook-mcp: local stdio MCP server (done)
 
 packages/bridge-protocol/            # (planned) request/response types/constants
 

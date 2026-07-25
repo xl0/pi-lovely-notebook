@@ -1,16 +1,16 @@
 {
-	"name": "@xl0/lovely-notebooks-mcp",
+	"name": "@xl0/lovely-notebook-mcp",
 	"version": "0.1.0",
 	"type": "module",
 	"files": [
 		"src"
 	],
 	"bin": {
-		"lovely-notebooks-mcp": "./src/server.ts"
+		"lovely-notebook-mcp": "./src/server.ts"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.16.0",
-		"@xl0/lovely-notebooks": "^0.1.0",
+		"@xl0/lovely-notebook": "^0.1.0",
 		"typebox": "1.1.38"
 	},
 	"publishConfig": {

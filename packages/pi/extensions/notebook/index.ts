@@ -22,7 +22,7 @@ import {
 	notebookWriteCellTool,
 	readCellAtIndex,
 	resolveCellIndex
-} from "@xl0/lovely-notebooks"
+} from "@xl0/lovely-notebook"
 
 type NotebookRenderTheme = Parameters<NonNullable<Parameters<ExtensionAPI["registerTool"]>[0]["renderCall"]>>[1]
 type NotebookRenderArgs = {
