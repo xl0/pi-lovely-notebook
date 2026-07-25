@@ -2,7 +2,22 @@
 	"name": "pi-lovely-notebook",
 	"version": "0.1.0",
 	"private": true,
+	"description": "Jupyter notebook tools for coding agents: shared core, Pi extension, MCP server",
+	"license": "MIT",
 	"type": "module",
+	"author": {
+		"name": "Alexey Zaytsev",
+		"url": "https://github.com/xl0",
+		"email": "alexey.zaytsev@gmail.com"
+	},
+	"homepage": "https://github.com/xl0/pi-lovely-notebook#readme",
+	"bugs": {
+		"url": "https://github.com/xl0/pi-lovely-notebook/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xl0/pi-lovely-notebook.git"
+	},
 	"workspaces": [
 		"packages/*"
 	],

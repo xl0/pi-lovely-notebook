@@ -1,12 +1,43 @@
 {
 	"name": "@xl0/lovely-notebook-mcp",
 	"version": "0.1.0",
+	"description": "MCP server: per-cell Jupyter notebook tools for reading and editing .ipynb files",
+	"license": "MIT",
 	"type": "module",
+	"author": {
+		"name": "Alexey Zaytsev",
+		"url": "https://github.com/xl0",
+		"email": "alexey.zaytsev@gmail.com"
+	},
+	"homepage": "https://github.com/xl0/pi-lovely-notebook/tree/master/packages/mcp#readme",
+	"bugs": {
+		"url": "https://github.com/xl0/pi-lovely-notebook/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xl0/pi-lovely-notebook.git",
+		"directory": "packages/mcp"
+	},
+	"keywords": [
+		"mcp",
+		"mcp-server",
+		"model context protocol",
+		"claude code",
+		"jupyter",
+		"jupyter notebook",
+		"notebook",
+		"ipynb"
+	],
 	"files": [
-		"src"
+		"src/",
+		"README.md",
+		"LICENSE"
 	],
 	"bin": {
 		"lovely-notebook-mcp": "./src/server.ts"
+	},
+	"scripts": {
+		"release": "bun publish --access public"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.16.0",

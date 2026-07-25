@@ -1,12 +1,41 @@
 {
 	"name": "@xl0/lovely-notebook",
 	"version": "0.1.0",
+	"description": "Jupyter notebook operations and agent tool definitions for .ipynb files",
+	"license": "MIT",
 	"type": "module",
+	"author": {
+		"name": "Alexey Zaytsev",
+		"url": "https://github.com/xl0",
+		"email": "alexey.zaytsev@gmail.com"
+	},
+	"homepage": "https://github.com/xl0/pi-lovely-notebook/tree/master/packages/core#readme",
+	"bugs": {
+		"url": "https://github.com/xl0/pi-lovely-notebook/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xl0/pi-lovely-notebook.git",
+		"directory": "packages/core"
+	},
+	"keywords": [
+		"jupyter",
+		"jupyter notebook",
+		"notebook",
+		"ipynb",
+		"nbformat",
+		"agent tools"
+	],
 	"files": [
-		"src"
+		"src/",
+		"README.md",
+		"LICENSE"
 	],
 	"exports": {
 		".": "./src/index.ts"
+	},
+	"scripts": {
+		"release": "bun publish --access public"
 	},
 	"devDependencies": {
 		"typebox": "1.1.38"
