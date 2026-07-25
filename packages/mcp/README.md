@@ -68,8 +68,10 @@ Plot outputs, cell attachments, and markdown `data:` URI images are returned as 
 The server has no resizer, so images over 4MB base64 become an omission note instead — read them
 in the notebook UI.
 
-Tool calls touching the same notebook are serialized (matched by real path, so symlinks don't
-slip past), because hosts issue calls concurrently.
+Tool calls are serialized — one at a time, in the order the host issued them — because hosts
+issue calls concurrently and every call is a read-parse-write of a whole notebook file. Note this
+only orders *this server's* calls: if the host also edits the notebook with its own file tools,
+nothing coordinates the two.
 
 Built on [`@xl0/lovely-notebook`](https://www.npmjs.com/package/@xl0/lovely-notebook).
 Source and design notes: https://github.com/xl0/pi-lovely-notebook

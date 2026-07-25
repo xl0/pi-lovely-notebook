@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
-import { realpath } from "node:fs/promises"
+import { isAbsolute, resolve } from "node:path"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import {
 	type NotebookToolContent,
-	normalizeNotebookPath,
 	notebookChangeCellTypeTool,
 	notebookClearOutputsTool,
 	notebookCreateTool,
@@ -42,28 +41,17 @@ const notebookTools = [
 type NotebookTool = (typeof notebookTools)[number]
 const toolsByName = new Map<string, NotebookTool>(notebookTools.map(tool => [tool.name, tool]))
 
-// Serialize all access per notebook file; MCP hosts may issue tool calls concurrently.
-const fileQueues = new Map<string, Promise<void>>()
-export async function withFileQueue<T>(path: string, fn: () => Promise<T>): Promise<T> {
-	let key: string
-	try {
-		key = await realpath(path)
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-		key = path
-	}
-
-	const prev = fileQueues.get(key) ?? Promise.resolve()
-	const next = prev.then(fn)
-	const tail = next.then(
+// One tool call at a time. MCP hosts issue calls concurrently, and every call is a short
+// read-parse-write of a single JSON file, so a global chain costs nothing and keeps execution
+// order identical to call order. Per-file queueing would only add path-aliasing edge cases.
+let queueTail: Promise<void> = Promise.resolve()
+export function withQueue<T>(fn: () => Promise<T>): Promise<T> {
+	const result = queueTail.then(fn)
+	queueTail = result.then(
 		() => undefined,
 		() => undefined
 	)
-	fileQueues.set(key, tail)
-	void tail.then(() => {
-		if (fileQueues.get(key) === tail) fileQueues.delete(key)
-	})
-	return next
+	return result
 }
 
 // No image resizer in the MCP build; cap raw size instead (Claude inline image limit is ~5MB decoded).
@@ -103,10 +91,11 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 		return { content: [{ type: "text", text: `Invalid arguments:\n${errors.join("\n")}` }], isError: true }
 	}
 
-	const params = { ...args, path: normalizeNotebookPath((args as { path: string }).path, serverCwd) }
+	const rawPath = (args as { path: string }).path
+	const params = { ...args, path: isAbsolute(rawPath) ? rawPath : resolve(serverCwd, rawPath) }
 	try {
 		const run = () => tool.run(params as never)
-		const content = capImages(await withFileQueue(params.path, run))
+		const content = capImages(await withQueue(run))
 		return { content }
 	} catch (error) {
 		return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], isError: true }
