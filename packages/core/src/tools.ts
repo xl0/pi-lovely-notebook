@@ -1,7 +1,5 @@
-import { StringEnum } from "@earendil-works/pi-ai"
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent"
-import { resizeImage } from "@earendil-works/pi-coding-agent"
-import { type Static, Type } from "typebox"
+import { isAbsolute, resolve } from "node:path"
+import { type Static, type TUnsafe, Type } from "typebox"
 import type { Notebook } from "./notebook"
 import {
 	changeCellType,
@@ -25,15 +23,49 @@ import {
 	writeCellSource
 } from "./notebook"
 
-export type NotebookToolContent = AgentToolResult<undefined>["content"]
+export interface NotebookTextContent {
+	type: "text"
+	text: string
+}
 
-async function pushImageContent(content: NotebookToolContent, image: { mime: string; data: string }) {
-	const resized = await resizeImage(Buffer.from(image.data, "base64"), image.mime)
-	if (!resized) {
-		content.push({ type: "text", text: "[Image omitted: could not be resized below the inline image size limit.]" })
-		return
-	}
-	content.push({ type: "image", data: resized.data, mimeType: resized.mimeType })
+export interface NotebookImageContent {
+	type: "image"
+	/** Base64-encoded image data, unresized; adapters resize or cap before sending to a model. */
+	data: string
+	mimeType: string
+}
+
+export type NotebookToolContent = (NotebookTextContent | NotebookImageContent)[]
+
+/** Model guidance shared by all adapters (pi prompt guidelines, MCP server instructions). */
+export const notebookToolGuidelines = [
+	"Notebook tools: use notebook_summary first to discover structure and cell ids.",
+	"Notebook tools: cell index selectors are 0-based; for notebooks without stored cell ids, use index selectors.",
+	"notebook_change_cell_type and notebook_write_cell type changes clear fields incompatible with the target type.",
+	"notebook_edit_cell: replacements must match exactly and uniquely.",
+	"notebook_insert: index -1 appends.",
+	"notebook_merge: cells must be adjacent and the same type; the anchor cell id is preserved.",
+	"notebook_clear_outputs: preserves source and execution count."
+]
+
+// Some models include a leading @ in path arguments; strip it like pi's built-in path tools do.
+export function normalizeNotebookPath(rawPath: string, cwd: string): string {
+	const stripped = rawPath.startsWith("@") ? rawPath.slice(1) : rawPath
+	return isAbsolute(stripped) ? stripped : resolve(cwd, stripped)
+}
+
+// String enum schema rendered as `type: "string"` + `enum`, not anyOf/const unions,
+// for providers (e.g. Google) that reject the latter.
+function StringEnum<T extends readonly string[]>(values: T, options?: { description?: string }): TUnsafe<T[number]> {
+	return Type.Unsafe<T[number]>({
+		type: "string",
+		enum: values as unknown as string[],
+		...(options?.description && { description: options.description })
+	})
+}
+
+function pushImageContent(content: NotebookToolContent, image: { mime: string; data: string }) {
+	content.push({ type: "image", data: image.data, mimeType: image.mime })
 }
 
 function cellSelectionText(cellId?: string, index?: number): string {
@@ -55,16 +87,24 @@ function resolveSelectedCellIndex(notebook: Notebook, cellId?: string, index?: n
 }
 
 const notebookSummaryParams = Type.Object({
-	path: Type.String({ description: "Path to an .ipynb notebook." })
+	path: Type.String({ description: "Path to an .ipynb notebook." }),
+	lineOffset: Type.Optional(Type.Integer({ minimum: 0, description: "Inclusive line offset within the formatted summary." })),
+	lineLimit: Type.Optional(Type.Integer({ minimum: 0, description: "Maximum number of summary lines to read from the offset." }))
 })
 
 async function runNotebookSummary(params: Static<typeof notebookSummaryParams>): Promise<NotebookToolContent> {
 	const notebook = await loadNotebook(params.path)
 	const summary = summarizeNotebook(params.path, notebook)
-	return [{ type: "text", text: formatNotebookSummary(summary) }]
+	return [{ type: "text", text: sliceCellSource(formatNotebookSummary(summary), params.lineOffset, params.lineLimit) }]
 }
 
-export const notebookSummaryTool = { params: notebookSummaryParams, run: runNotebookSummary } as const
+export const notebookSummaryTool = {
+	name: "notebook_summary",
+	description: "Summarize a Jupyter notebook by cell.",
+	mutates: false,
+	params: notebookSummaryParams,
+	run: runNotebookSummary
+} as const
 
 const notebookCreateParams = Type.Object({
 	path: Type.String({ description: "Path for the new .ipynb notebook." }),
@@ -77,7 +117,13 @@ async function runNotebookCreate(params: Static<typeof notebookCreateParams>): P
 	return [{ type: "text", text: `Created notebook ${params.path} with language ${language}.` }]
 }
 
-export const notebookCreateTool = { params: notebookCreateParams, run: runNotebookCreate } as const
+export const notebookCreateTool = {
+	name: "notebook_create",
+	description: "Create a new empty Jupyter notebook.",
+	mutates: true,
+	params: notebookCreateParams,
+	run: runNotebookCreate
+} as const
 
 const notebookReadCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -98,7 +144,7 @@ async function runNotebookReadCell(params: Static<typeof notebookReadCellParams>
 		const content: NotebookToolContent = [{ type: "text", text }]
 		if (params.includeImages !== false) {
 			for (const img of images) {
-				await pushImageContent(content, img)
+				pushImageContent(content, img)
 			}
 		}
 		return content
@@ -107,7 +153,13 @@ async function runNotebookReadCell(params: Static<typeof notebookReadCellParams>
 	return [{ type: "text", text: sliced }]
 }
 
-export const notebookReadCellTool = { params: notebookReadCellParams, run: runNotebookReadCell } as const
+export const notebookReadCellTool = {
+	name: "notebook_read_cell",
+	description: "Read one notebook cell source.",
+	mutates: false,
+	params: notebookReadCellParams,
+	run: runNotebookReadCell
+} as const
 
 const notebookWriteCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -127,7 +179,13 @@ async function runNotebookWriteCell(params: Static<typeof notebookWriteCellParam
 	return [{ type: "text", text: `Wrote cell ${cellSelectionText(params.cellId, params.index)}${type} in ${params.path}.` }]
 }
 
-export const notebookWriteCellTool = { params: notebookWriteCellParams, run: runNotebookWriteCell } as const
+export const notebookWriteCellTool = {
+	name: "notebook_write_cell",
+	description: "Replace one notebook cell source and optionally change its type.",
+	mutates: true,
+	params: notebookWriteCellParams,
+	run: runNotebookWriteCell
+} as const
 
 const notebookChangeCellTypeParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -148,7 +206,13 @@ async function runNotebookChangeCellType(params: Static<typeof notebookChangeCel
 	]
 }
 
-export const notebookChangeCellTypeTool = { params: notebookChangeCellTypeParams, run: runNotebookChangeCellType } as const
+export const notebookChangeCellTypeTool = {
+	name: "notebook_change_cell_type",
+	description: "Change one notebook cell type.",
+	mutates: true,
+	params: notebookChangeCellTypeParams,
+	run: runNotebookChangeCellType
+} as const
 
 const notebookEditCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -175,7 +239,13 @@ async function runNotebookEditCell(params: Static<typeof notebookEditCellParams>
 	]
 }
 
-export const notebookEditCellTool = { params: notebookEditCellParams, run: runNotebookEditCell } as const
+export const notebookEditCellTool = {
+	name: "notebook_edit_cell",
+	description: "Apply exact source replacements within one notebook cell.",
+	mutates: true,
+	params: notebookEditCellParams,
+	run: runNotebookEditCell
+} as const
 
 const notebookInsertParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -204,7 +274,13 @@ async function runNotebookInsert(params: Static<typeof notebookInsertParams>): P
 	]
 }
 
-export const notebookInsertTool = { params: notebookInsertParams, run: runNotebookInsert } as const
+export const notebookInsertTool = {
+	name: "notebook_insert",
+	description: "Insert one notebook cell near an anchor.",
+	mutates: true,
+	params: notebookInsertParams,
+	run: runNotebookInsert
+} as const
 
 const notebookDeleteParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -217,7 +293,13 @@ async function runNotebookDelete(params: Static<typeof notebookDeleteParams>): P
 	return [{ type: "text", text: `Deleted cell ${cellSelectionText(params.cellId, params.index)} from ${params.path}.` }]
 }
 
-export const notebookDeleteTool = { params: notebookDeleteParams, run: runNotebookDelete } as const
+export const notebookDeleteTool = {
+	name: "notebook_delete",
+	description: "Delete one notebook cell.",
+	mutates: true,
+	params: notebookDeleteParams,
+	run: runNotebookDelete
+} as const
 
 const notebookMoveParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -247,7 +329,13 @@ async function runNotebookMove(params: Static<typeof notebookMoveParams>): Promi
 	]
 }
 
-export const notebookMoveTool = { params: notebookMoveParams, run: runNotebookMove } as const
+export const notebookMoveTool = {
+	name: "notebook_move",
+	description: "Move one notebook cell relative to another.",
+	mutates: true,
+	params: notebookMoveParams,
+	run: runNotebookMove
+} as const
 
 const notebookMergeParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -268,7 +356,13 @@ async function runNotebookMerge(params: Static<typeof notebookMergeParams>): Pro
 	]
 }
 
-export const notebookMergeTool = { params: notebookMergeParams, run: runNotebookMerge } as const
+export const notebookMergeTool = {
+	name: "notebook_merge",
+	description: "Merge one notebook cell with an adjacent cell.",
+	mutates: true,
+	params: notebookMergeParams,
+	run: runNotebookMerge
+} as const
 
 const notebookReadOutputParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -298,7 +392,7 @@ async function runNotebookReadOutput(params: Static<typeof notebookReadOutputPar
 	const images = result.images ?? []
 	if (params.includeImages !== false) {
 		for (const img of images) {
-			await pushImageContent(content, img)
+			pushImageContent(content, img)
 		}
 	} else if (content.length === 0 && images.length > 0) {
 		content.push({ type: "text", text: "[Images omitted: includeImages=false.]" })
@@ -306,7 +400,13 @@ async function runNotebookReadOutput(params: Static<typeof notebookReadOutputPar
 	return content
 }
 
-export const notebookReadOutputTool = { params: notebookReadOutputParams, run: runNotebookReadOutput } as const
+export const notebookReadOutputTool = {
+	name: "notebook_read_cell_output",
+	description: "Read one output from a code cell. Supports text and image outputs.",
+	mutates: false,
+	params: notebookReadOutputParams,
+	run: runNotebookReadOutput
+} as const
 
 const notebookReadCellAttachmentParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
@@ -319,11 +419,14 @@ async function runNotebookReadCellAttachment(params: Static<typeof notebookReadC
 	const notebook = await loadNotebook(params.path)
 	const result = readCellAttachment(notebook, resolveSelectedCellIndex(notebook, params.cellId, params.index), params.key)
 	const content: NotebookToolContent = []
-	await pushImageContent(content, result)
+	pushImageContent(content, result)
 	return content
 }
 
 export const notebookReadCellAttachmentTool = {
+	name: "notebook_read_cell_attachment",
+	description: "Read an image attachment from a cell by its key.",
+	mutates: false,
 	params: notebookReadCellAttachmentParams,
 	run: runNotebookReadCellAttachment
 } as const
@@ -344,4 +447,10 @@ async function runNotebookClearOutputs(params: Static<typeof notebookClearOutput
 	]
 }
 
-export const notebookClearOutputsTool = { params: notebookClearOutputsParams, run: runNotebookClearOutputs } as const
+export const notebookClearOutputsTool = {
+	name: "notebook_clear_outputs",
+	description: "Clear outputs from one code cell.",
+	mutates: true,
+	params: notebookClearOutputsParams,
+	run: runNotebookClearOutputs
+} as const

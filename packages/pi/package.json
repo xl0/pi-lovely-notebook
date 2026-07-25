@@ -1,0 +1,36 @@
+{
+	"name": "@xl0/pi-lovely-notebooks",
+	"version": "0.1.0",
+	"keywords": [
+		"pi-package",
+		"jupyter",
+		"python",
+		"jupyter notebook",
+		"vscode",
+		"visual studio code"
+	],
+	"type": "module",
+	"files": [
+		"extensions"
+	],
+	"dependencies": {
+		"@xl0/lovely-notebooks": "^0.1.0"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "^0.80.10",
+		"@earendil-works/pi-tui": "^0.80.10"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*",
+		"typebox": "*"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"pi": {
+		"extensions": [
+			"./extensions"
+		]
+	}
+}

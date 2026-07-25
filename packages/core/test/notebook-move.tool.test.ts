@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import { notebookMoveTool, notebookReadCellTool } from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookMoveTool, notebookReadCellTool } from "../src/tools"
 import { copyFixture, firstText } from "./helpers"
 
 test("runNotebookMove returns concise confirmation and reorders cells", async () => {

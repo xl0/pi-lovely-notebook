@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { notebookReadCellTool } from "../extensions/notebook/tools"
+import { notebookReadCellTool } from "../src/tools"
 import { FIXTURE_DIR, firstText } from "./helpers"
 
 test("runNotebookReadCell returns raw cell source", async () => {
@@ -43,10 +43,11 @@ test("runNotebookReadCell rejects invalid line slices", async () => {
 	)
 })
 
-test("runNotebookReadCell omits subtly corrupted inline images", async () => {
+test("runNotebookReadCell extracts inline images as raw image content", async () => {
 	const result = await notebookReadCellTool.run({ path: join(FIXTURE_DIR, "subtly-corrupt-images.ipynb"), cellId: "corrupt-md" })
 	expect(firstText(result)).toContain("![corrupt png]([image: image/png])")
-	expect(result[1]).toEqual({ type: "text", text: "[Image omitted: could not be resized below the inline image size limit.]" })
+	expect(result[1]?.type).toBe("image")
+	expect(result[1]?.type === "image" && result[1].mimeType).toBe("image/png")
 })
 
 test("runNotebookReadCell can omit inline image content", async () => {

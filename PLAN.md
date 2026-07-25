@@ -10,10 +10,11 @@ Initial target: execute open VSCode notebooks/cells through the currently select
 
 ## Constraints / decisions
 
-- Keep `extensions/notebook/index.ts` as the Pi adapter seam.
-- Keep `extensions/notebook/tools.ts` as the runner/test seam.
-- Keep pure notebook JSON operations in `extensions/notebook/notebook.ts`; do not mix kernel execution into that module.
-- Add the VSCode bridge in this repo as a separate companion package, not a separate repo yet.
+- Keep `packages/pi/extensions/notebook/index.ts` as the Pi adapter seam.
+- Keep `packages/core/src/tools.ts` as the runner/test seam.
+- Keep pure notebook JSON operations in `packages/core/src/notebook.ts`; do not mix kernel execution into that module.
+- Add the VSCode bridge in this repo as another workspace package (`packages/*`), not a separate repo yet.
+- Bridge-backed execution is a Pi concern; the MCP server stays file-only (MCP hosts like Claude Code bring their own kernel execution via IDE integration).
 - Do not expose generic VSCode APIs. The bridge should provide a narrow, purpose-built RPC surface.
 - Pi still normalizes notebook paths and queues per-file mutations/execution calls.
 - VSCode bridge should execute using the currently selected VSCode/Jupyter kernel.
@@ -23,18 +24,15 @@ Initial target: execute open VSCode notebooks/cells through the currently select
 ## Proposed repo layout
 
 ```txt
-extensions/notebook/                 # existing Pi extension
-  index.ts                           # register tools, path normalization, queueing
-  tools.ts                           # schemas + runner/test seam
-  notebook.ts                        # notebook JSON core
-  vscode-bridge.ts                   # Pi-side bridge discovery/client
+packages/core/                       # @xl0/lovely-notebooks: shared published core (done)
+packages/pi/                         # @xl0/pi-lovely-notebooks: Pi adapter (done)
+  extensions/notebook/index.ts       # register tools, rendering, resize, queueing
+  extensions/notebook/vscode-bridge.ts  # (planned) Pi-side bridge discovery/client
+packages/mcp/                        # @xl0/lovely-notebooks-mcp: local stdio MCP server (done)
 
-shared/
-  notebook-bridge-protocol.ts        # request/response types/constants
+packages/bridge-protocol/            # (planned) request/response types/constants
 
-vscode-bridge/
-  package.json
-  tsconfig.json
+packages/vscode-bridge/              # (planned)
   src/extension.ts                   # VSCode activation
   src/server.ts                      # local RPC/auth/router
   src/handlers.ts                    # testable orchestration
@@ -122,17 +120,17 @@ RPC handlers should depend on `NotebookHost`, not directly on `vscode` globals.
 
 ### P1. Pi-side execution tools
 
-- [ ] Add Pi-side bridge discovery/client module under `extensions/notebook/`.
+- [ ] Add Pi-side bridge discovery/client module under `packages/pi/extensions/notebook/`.
 - [ ] Add `notebook_execute_all` schema + runner.
 - [ ] Add `notebook_execute_cell` schema + runner.
-- [ ] Register execution tools in `extensions/notebook/index.ts`.
+- [ ] Register execution tools in `packages/pi/extensions/notebook/index.ts`.
 - [ ] Normalize paths at adapter seam before bridge calls.
 - [ ] Wrap execution calls in `withFileMutationQueue(path, ...)` because execution may save/mutate `.ipynb`.
 - [ ] Add prompt snippets/guidelines describing VSCode bridge requirement and `saveAfter` behavior.
 
 ### P2. VSCode bridge package
 
-- [ ] Create `vscode-bridge/` package scaffold.
+- [ ] Create `packages/vscode-bridge/` package scaffold.
 - [ ] Implement VSCode activation/deactivation.
 - [ ] Implement local RPC server and token auth.
 - [ ] Write/remove connection file on activate/deactivate.

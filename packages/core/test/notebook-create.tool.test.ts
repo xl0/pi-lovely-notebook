@@ -2,8 +2,8 @@ import { expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import { notebookCreateTool } from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookCreateTool } from "../src/tools"
 import { createTempNotebook, firstText } from "./helpers"
 
 test("runNotebookCreate creates empty notebook with default language", async () => {

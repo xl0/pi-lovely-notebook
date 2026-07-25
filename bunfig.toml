@@ -1,0 +1,3 @@
+# Flat node_modules so `bun run link:pi` can overlay local pi-mono checkouts in one place.
+[install]
+linker = "hoisted"

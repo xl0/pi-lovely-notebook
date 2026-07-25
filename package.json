@@ -1,16 +1,11 @@
 {
-	"name": "pi-lovely-notebooks",
+	"name": "pi-lovely-notebook",
 	"version": "0.1.0",
 	"private": true,
-	"keywords": [
-		"pi-package",
-		"jupyter",
-		"python",
-		"jupyter notebook",
-		"vscode",
-		"visual studio code"
-	],
 	"type": "module",
+	"workspaces": [
+		"packages/*"
+	],
 	"scripts": {
 		"test": "bun test",
 		"typecheck": "tsgo --noEmit",
@@ -19,26 +14,18 @@
 		"format": "biome format --write .",
 		"format:check": "biome format .",
 		"biome:check": "biome check .",
-		"tool": "bun scripts/run-notebook-tool.ts"
+		"tool": "bun scripts/run-notebook-tool.ts",
+		"link:pi": "for p in ai:pi-ai coding-agent:pi-coding-agent tui:pi-tui; do rm -rf \"node_modules/@earendil-works/${p#*:}\" && ln -s \"$PWD/../pi-mono/packages/${p%%:*}\" \"node_modules/@earendil-works/${p#*:}\"; done"
 	},
 	"devDependencies": {
-		"@earendil-works/pi-ai": "file:../pi-mono/packages/ai",
-		"@earendil-works/pi-coding-agent": "file:../pi-mono/packages/coding-agent",
-		"@earendil-works/pi-tui": "file:../pi-mono/packages/tui",
+		"@xl0/lovely-notebooks": "^0.1.0",
 		"@biomejs/biome": "^2.4.14",
 		"@typescript/native-preview": "^7.0.0-dev.20260502.1",
-		"bun-types": "^1.3.13",
-		"typebox": "^1.1.38"
-	},
-	"peerDependencies": {
-		"@earendil-works/pi-ai": "*",
-		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*",
-		"typebox": "*"
+		"bun-types": "^1.3.13"
 	},
 	"pi": {
 		"extensions": [
-			"./extensions"
+			"./packages/pi/extensions"
 		]
 	}
 }

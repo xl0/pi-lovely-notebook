@@ -1,12 +1,6 @@
 import { expect, test } from "bun:test"
-import { loadNotebook } from "../extensions/notebook/notebook"
-import {
-	notebookEditCellTool,
-	notebookInsertTool,
-	notebookMoveTool,
-	notebookReadCellTool,
-	notebookWriteCellTool
-} from "../extensions/notebook/tools"
+import { loadNotebook } from "../src/notebook"
+import { notebookEditCellTool, notebookInsertTool, notebookMoveTool, notebookReadCellTool, notebookWriteCellTool } from "../src/tools"
 import { copyFixture, firstText } from "./helpers"
 
 test("no-id notebook can be mutated by index without id assignment", async () => {
