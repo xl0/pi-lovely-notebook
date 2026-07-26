@@ -1,12 +1,9 @@
 # @xl0/pi-lovely-notebook
 
-Jupyter notebook tools for [pi](https://pi.dev). Gives the agent per-cell access to `.ipynb`
-files, so it never has to read or rewrite the whole notebook JSON — which is mostly base64
-image blobs, and which the model will happily mangle on a full-file write.
+Lovely Jupyter notebook tools for [pi](https://pi.dev). Gives the agent per-cell access to `.ipynb` files.
 
 ```bash
 pi install npm:@xl0/pi-lovely-notebook      # user settings
-pi install -l npm:@xl0/pi-lovely-notebook   # this project only
 pi -e npm:@xl0/pi-lovely-notebook           # try it for one run
 ```
 
@@ -26,7 +23,7 @@ pi -e npm:@xl0/pi-lovely-notebook           # try it for one run
 | `notebook_merge` | Merge with the adjacent same-type cell |
 | `notebook_clear_outputs` | Drop outputs, keep source and execution count |
 | `notebook_read_cell_output` | One output, as text or image (index optional for single-output cells) |
-| `notebook_read_cell_attachment` | One cell attachment, by key |
+| `notebook_read_cell_attachment` | One image pasted into a markdown cell, by its `attachment:` key |
 
 nbformat 4 only. Each tool acts on one cell, selected by `cellId` or 0-based `index`.
 Mutations preserve ids, metadata, and outputs; notebooks without cell ids stay that way and are
@@ -49,9 +46,6 @@ torch.cuda.memory_allocated()
 </cell>
 ```
 
-Outputs nest inside their cell and previews sit inside the element that owns them, so output
-text that looks like markup — `<lovely_tensors.repr_rgb.RGBProxy>`, the usual Python repr —
-can't be confused with structure.
 
 ## In the TUI
 
@@ -62,8 +56,22 @@ can't be confused with structure.
 - All calls for a given notebook are serialized, so pi's parallel tool execution can't interleave
   two writes to the same file.
 
-There is no notebook UI here on purpose — use VSCode (or Jupyter) as the notebook frontend and
-let pi edit the file underneath it.
 
 Built on [`@xl0/lovely-notebook`](https://www.npmjs.com/package/@xl0/lovely-notebook).
 Source and design notes: https://github.com/xl0/pi-lovely-notebook
+
+## Related projects
+
+|  |  |
+| --- | --- |
+| [Pi Lovely Web](https://github.com/xl0/pi-lovely-web) | `web_search`, `web_fetch`, `web_image` tools |
+| [Pi Lovely Dev Tools](https://github.com/xl0/pi-lovely-dev-tools) | interactive debugging helpers `/tool`, `/show-sysprompt`, `/show-context`, `/llm-stats` |
+| [Pi Lovely Codex](https://github.com/xl0/pi-lovely-codex) | GPT fast mode and Codex-style `apply_patch` |
+| [Pi Lovely IDE](https://github.com/xl0/pi-lovely-ide) | IDE integration |
+| [Pi Lovely Config](https://github.com/xl0/pi-lovely-config) | scoped config helpers for Pi extensions |
+| [Pi Lovely Comment](https://github.com/xl0/agent-files/tree/master/pi/packages/pi-lovely-comment) | open the last assistant message in your editor and sync edits back into the prompt |
+| [Pi Lovely Rename](https://github.com/xl0/agent-files/tree/master/pi/packages/pi-lovely-rename) | automatic and manual session naming |
+
+---
+
+Like this work? [Hire me](https://alexey.work/cv?ref=pi-lovely-notebook)

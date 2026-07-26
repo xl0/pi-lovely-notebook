@@ -4,8 +4,7 @@ Jupyter notebook tools for coding agents. An agent gets per-cell reads and edits
 files instead of loading and rewriting the whole notebook JSON.
 
 Why it matters: a real notebook is mostly base64 image blobs and output metadata. Reading the
-file burns the context window on noise, and rewriting it from the model's memory silently
-mangles outputs, ids, and metadata. These tools give the model a compact structural summary,
+file burns the context window on noise. These tools give the model a compact structural summary,
 cell-scoped edits that preserve everything they don't touch, and images as actual images.
 
 Same tools, three ways to consume them:
@@ -17,12 +16,11 @@ Same tools, three ways to consume them:
 | [`packages/mcp`](packages/mcp) | `@xl0/lovely-notebook-mcp` | Local stdio MCP server (Claude Code, or any MCP host) |
 
 ```bash
-pi install npm:@xl0/pi-lovely-notebook                      # pi extension
-claude mcp add lovely-notebook -- bunx @xl0/lovely-notebook-mcp   # MCP server
+pi install npm:@xl0/pi-lovely-notebook                              # pi extension
+claude mcp add lovely-notebook -- npx -y @xl0/lovely-notebook-mcp   # MCP server
 ```
 
-Notebooks are nbformat 4 only. Every tool acts on one cell, selected by `cellId` or 0-based
-`index`.
+Notebooks are nbformat 4 only. Every tool acts on one cell, selected by `cellId` or 0-based `index`.
 
 ## Tools
 
@@ -40,10 +38,13 @@ Notebooks are nbformat 4 only. Every tool acts on one cell, selected by `cellId`
 | `notebook_merge` | Merge with the adjacent same-type cell |
 | `notebook_clear_outputs` | Drop outputs, keep source and execution count |
 | `notebook_read_cell_output` | One output, as text or image (index optional for single-output cells) |
-| `notebook_read_cell_attachment` | One cell attachment, by key |
+| `notebook_read_cell_attachment` | One image pasted into a markdown cell, by its `attachment:` key |
 
 Mutations preserve cell ids, metadata, and outputs. Notebooks without cell ids stay that way —
 address their cells by index.
+
+Attachments are images stored inside the `.ipynb` itself, keyed by filename — what Jupyter writes
+when you paste an image into a markdown cell and reference it as `![](attachment:plot.png)`.
 
 ## What the model sees
 
@@ -80,18 +81,38 @@ resized by pi, size-capped under MCP.
 
 ## Development
 
-Requires [bun](https://bun.sh). Packages ship TypeScript source; there is no build step.
+Requires [bun](https://bun.sh) — development runs straight off the TypeScript source.
 
 ```bash
 bun install
-bun test                 # 84 tests
+bun test                 # 97 tests
 bun run check            # tsgo --noEmit + biome
 bun run tool -- notebook_summary '{"path":"nb.ipynb"}'   # run a tool without an agent
 bun run link:pi          # symlink a local pi-mono checkout for development
 ```
+
+Publishing builds: core emits ESM + `.d.ts`, the MCP server a single node bundle, so neither needs
+bun installed to run. Bun consumers still get the source through the `bun` export condition. The
+pi extension ships source only — pi is a bun app.
 
 Pi loads the extension from this repo automatically (`pi.extensions` in the root
 `package.json`), so a pi session started here dogfoods the working tree.
 
 Architecture and non-obvious details: [CODE.md](CODE.md). Roadmap: [PLAN.md](PLAN.md).
 Decisions: [docs/adr](docs/adr).
+
+## Related projects
+
+|  |  |
+| --- | --- |
+| [Pi Lovely Web](https://github.com/xl0/pi-lovely-web) | `web_search`, `web_fetch`, `web_image` tools |
+| [Pi Lovely Dev Tools](https://github.com/xl0/pi-lovely-dev-tools) | interactive debugging helpers `/tool`, `/show-sysprompt`, `/show-context`, `/llm-stats` |
+| [Pi Lovely Codex](https://github.com/xl0/pi-lovely-codex) | GPT fast mode and Codex-style `apply_patch` |
+| [Pi Lovely IDE](https://github.com/xl0/pi-lovely-ide) | IDE integration |
+| [Pi Lovely Config](https://github.com/xl0/pi-lovely-config) | scoped config helpers for Pi extensions |
+| [Pi Lovely Comment](https://github.com/xl0/agent-files/tree/master/pi/packages/pi-lovely-comment) | open the last assistant message in your editor and sync edits back into the prompt |
+| [Pi Lovely Rename](https://github.com/xl0/agent-files/tree/master/pi/packages/pi-lovely-rename) | automatic and manual session naming |
+
+---
+
+Like this work? [Hire me](https://alexey.work/cv?ref=pi-lovely-notebook)

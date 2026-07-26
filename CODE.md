@@ -18,6 +18,18 @@ Thin adapters keep the Pi and MCP dependency trees isolated. Root `package.json`
 Root `README.md` is the project entry point; each package carries its own npm-facing
 `README.md` + `LICENSE` (MIT) and full npm metadata, plus `bun run release` to publish it.
 
+Publishing is built, because node refuses to strip types under `node_modules`
+(`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`) — shipping source alone made `npx` installs
+bun-only, which is the wrong bet for an MCP server. `bun run release` builds first:
+
+- core: `bun build --target node` ESM + `tsgo -p tsconfig.build.json` declarations. Its `exports`
+  keeps a `bun` condition pointing at `src/`, so bun (and everything in this repo) still runs the
+  TypeScript directly and no build is needed for development.
+- mcp: one `dist/bin.js` bundle from `src/bin.ts`, SDK/typebox/core external. `bin.ts` exists so
+  the published entry connects the transport without an `import.meta.main` guard — bun compiles
+  that to `__require.main`, which throws under node.
+- pi: source only. Pi is a bun app and loads TypeScript extensions directly.
+
 ## Core
 
 `packages/core/src/notebook.ts` — pure notebook JSON operations, no I/O beyond load/save.
@@ -124,7 +136,7 @@ cells' outputs) and the count is reported, since nothing else would show the los
 - `resolveContentImages` runs core images through Pi's `resizeImage`; unresizable ones become
   `[Image omitted: ...]` notes.
 
-`packages/mcp/src/server.ts` (`bun packages/mcp/src/server.ts`, or the `lovely-notebook-mcp` bin)
+`packages/mcp/src/server.ts` (`bun packages/mcp/src/bin.ts`, or the `lovely-notebook-mcp` bin)
 
 - Low-level SDK `Server` with `tools/list`/`tools/call`; typebox schemas pass through verbatim
   as `inputSchema`, args checked with `Value.Check`; failures return `isError` text.

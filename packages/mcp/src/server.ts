@@ -1,7 +1,5 @@
-#!/usr/bin/env bun
 import { isAbsolute, resolve } from "node:path"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import {
 	type NotebookToolContent,
@@ -66,7 +64,7 @@ function capImages(content: NotebookToolContent): NotebookToolContent {
 	})
 }
 
-const server = new Server(
+export const server = new Server(
 	{ name: "lovely-notebook", version: packageJson.version },
 	{
 		capabilities: { tools: {} },
@@ -103,5 +101,3 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 		return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], isError: true }
 	}
 })
-
-if (import.meta.main) await server.connect(new StdioServerTransport())
