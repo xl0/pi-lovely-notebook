@@ -112,6 +112,11 @@ function quoteAttribute(text: string): string {
 	return `"${text.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}"`
 }
 
+// Previews keep the source's trailing newline; the summary joins on newlines and would double it.
+function trimTrailingNewline(text: string): string {
+	return text.endsWith("\n") ? text.slice(0, -1) : text
+}
+
 export interface NotebookSourceEdit {
 	oldText: string
 	newText: string
@@ -500,23 +505,31 @@ export function formatNotebookSummary(summary: NotebookSummary): string {
 		if (cell.outputCount !== undefined) attrs.push(`outputs=${quoteAttribute(String(cell.outputCount))}`)
 		if (cell.attachmentKeys !== undefined && cell.attachmentKeys.length > 0)
 			attrs.push(`atts=${quoteAttribute(cell.attachmentKeys.join(" "))}`)
-		lines.push(`<cell ${attrs.join(" ")} />`)
-		if (cell.preview.length > 0) lines.push(cell.preview)
-		for (const output of cell.outputs ?? []) {
-			const outputAttrs = [
-				cell.id ? `cell_id=${quoteAttribute(cell.id)}` : `cell_index=${quoteAttribute(String(cell.index))}`,
-				`index=${quoteAttribute(String(output.index))}`,
-				`type=${quoteAttribute(output.type)}`
-			]
+		const outputs = cell.outputs ?? []
+		if (cell.preview.length === 0 && outputs.length === 0) {
+			lines.push(`<cell ${attrs.join(" ")} />`)
+			continue
+		}
+
+		lines.push(`<cell ${attrs.join(" ")}>`)
+		if (cell.preview.length > 0) lines.push(trimTrailingNewline(cell.preview))
+		for (const output of outputs) {
+			const outputAttrs = [`index=${quoteAttribute(String(output.index))}`, `type=${quoteAttribute(output.type)}`]
 			if (output.name) outputAttrs.push(`name=${quoteAttribute(output.name)}`)
 			if (output.mime) outputAttrs.push(`mime=${quoteAttribute(output.mime)}`)
 			if (output.ename) outputAttrs.push(`ename=${quoteAttribute(output.ename)}`)
 			if (output.executionCount !== undefined && output.executionCount !== null) {
 				outputAttrs.push(`n_exec=${quoteAttribute(String(output.executionCount))}`)
 			}
-			lines.push(`<output ${outputAttrs.join(" ")} />`)
-			if (output.preview.length > 0) lines.push(output.preview)
+			if (output.preview.length === 0) {
+				lines.push(`<output ${outputAttrs.join(" ")} />`)
+				continue
+			}
+			lines.push(`<output ${outputAttrs.join(" ")}>`)
+			lines.push(trimTrailingNewline(output.preview))
+			lines.push("</output>")
 		}
+		lines.push("</cell>")
 	}
 
 	return lines.join("\n")
@@ -682,7 +695,8 @@ export interface NotebookReadOutput {
 	images?: Array<{ mime: string; data: string }>
 }
 
-export function readCellOutput(notebook: Notebook, cellIndex: number, outputIndex: number, mime?: string): NotebookReadOutput {
+/** `outputIndex` may be omitted when the cell has exactly one output; ambiguity is an error, not a default. */
+export function readCellOutput(notebook: Notebook, cellIndex: number, outputIndex?: number, mime?: string): NotebookReadOutput {
 	const cellData = requireCell(notebook, cellIndex)
 	const cellId = storedCellId(cellData)
 
@@ -691,19 +705,22 @@ export function readCellOutput(notebook: Notebook, cellIndex: number, outputInde
 	}
 
 	const outputs = Array.isArray(cellData.outputs) ? cellData.outputs : []
-	if (!Number.isInteger(outputIndex) || outputIndex < 0 || outputIndex >= outputs.length) {
-		throw new Error(`Output index out of range: ${outputIndex} (cell has ${outputs.length} outputs)`)
+	if (outputIndex === undefined && outputs.length !== 1) {
+		throw new Error(
+			outputs.length === 0
+				? `Cell index ${cellIndex} has no outputs`
+				: `Cell index ${cellIndex} has ${outputs.length} outputs; pass outputIndex (0-${outputs.length - 1})`
+		)
 	}
 
-	const output = outputs[outputIndex]
-	if (output === undefined) throw new Error(`Output index out of range: ${outputIndex} (cell has ${outputs.length} outputs)`)
-
-	const raw = output
+	const index = outputIndex ?? 0
+	const raw = outputs[index]
+	if (raw === undefined) throw new Error(`Output index out of range: ${index} (cell has ${outputs.length} outputs)`)
 	const outputType = raw.output_type
 	const base = {
 		cellIndex,
 		...(cellId === undefined ? {} : { cellId }),
-		outputIndex,
+		outputIndex: index,
 		outputType
 	}
 
@@ -725,13 +742,13 @@ export function readCellOutput(notebook: Notebook, cellIndex: number, outputInde
 
 	if (outputType === "display_data" || outputType === "execute_result") {
 		if (!isObject(raw.data)) {
-			throw new Error(`Output ${outputIndex} has no data`)
+			throw new Error(`Output ${index} has no data`)
 		}
 		const data = raw.data
 
 		const mimeTypes = Object.keys(data)
 		if (mimeTypes.length === 0) {
-			throw new Error(`Output ${outputIndex} has no mime types`)
+			throw new Error(`Output ${index} has no mime types`)
 		}
 
 		let selectedMime = mime
@@ -740,23 +757,27 @@ export function readCellOutput(notebook: Notebook, cellIndex: number, outputInde
 		}
 		const entries = displayDataEntries(data)
 		if (selectedMime === undefined) {
-			const textEntries = entries.filter(entry => entry.image === undefined)
-			const text =
-				textEntries.length > 0 ? textEntries.map(entry => `<output mime="${entry.mime}" />\n${entry.text}`).join("\n") : undefined
+			// One element per MIME variant, same shape as the summary: variants whose content is not
+			// text (images) or is empty self-close, the rest wrap their text so a repr like
+			// `<module.Class>` cannot be read as markup.
+			const text = entries
+				.map(entry => {
+					const head = `<output mime=${quoteAttribute(entry.mime)}`
+					if (entry.image !== undefined || entry.text.length === 0) return `${head} />`
+					return `${head}>\n${trimTrailingNewline(entry.text)}\n</output>`
+				})
+				.join("\n")
 			const images = entries.flatMap(entry => (entry.image === undefined ? [] : [entry.image]))
-			if (text === undefined && images.length === 0) {
-				throw new Error(`Output ${outputIndex} has no displayable content`)
-			}
 			return {
 				...base,
 				mime: entries.map(entry => entry.mime).join(", "),
-				...(text === undefined ? {} : { text }),
+				text,
 				...(images.length > 0 ? { images } : {})
 			}
 		}
 
 		if (!(selectedMime in data)) {
-			throw new Error(`Mime type "${selectedMime}" not found in output ${outputIndex}. Available: ${mimeTypes.join(", ")}`)
+			throw new Error(`Mime type "${selectedMime}" not found in output ${index}. Available: ${mimeTypes.join(", ")}`)
 		}
 
 		const value = data[selectedMime]

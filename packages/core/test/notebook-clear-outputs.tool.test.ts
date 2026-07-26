@@ -10,7 +10,7 @@ test("runNotebookClearOutputs returns concise confirmation and clears outputs", 
 		const result = await notebookClearOutputsTool.run({ path: fixture.path, cellId: "95cca932" })
 		expect(firstText(result)).toBe(`Cleared outputs for cell 95cca932 in ${fixture.path}.`)
 		const summary = await notebookSummaryTool.run({ path: fixture.path })
-		expect(firstText(summary)).toContain('<cell index="4" id="95cca932" type="code" lines="3" outputs="0" />')
+		expect(firstText(summary)).toContain('<cell index="4" id="95cca932" type="code" lines="3" outputs="0">')
 	} finally {
 		await fixture.cleanup()
 	}

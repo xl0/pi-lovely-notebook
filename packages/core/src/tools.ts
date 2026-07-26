@@ -350,7 +350,9 @@ const notebookReadOutputParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to read output from." })),
 	index: Type.Optional(Type.Integer({ minimum: 0, description: "0-based cell index to read output from." })),
-	outputIndex: Type.Integer({ minimum: 0, description: "0-based index of the output within the cell." }),
+	outputIndex: Type.Optional(
+		Type.Integer({ minimum: 0, description: "0-based index of the output within the cell. Omit when the cell has one output." })
+	),
 	mime: Type.Optional(
 		Type.String({
 			description:

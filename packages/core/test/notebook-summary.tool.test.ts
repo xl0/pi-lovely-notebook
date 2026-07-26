@@ -9,8 +9,8 @@ test("runNotebookSummary reports cleared outputs", async () => {
 	try {
 		const summary = await notebookSummaryTool.run({ path: fixture.path })
 		expect(firstText(summary)).toContain("meta nbformat=4.5 kernel=python3 cells=12")
-		expect(firstText(summary)).toContain('<cell index="4" id="95cca932" type="code" lines="3" outputs="1" />')
-		expect(firstText(summary)).toContain('<output cell_id="95cca932" index="0" type="execute_result" mime="text/plain" />')
+		expect(firstText(summary)).toContain('<cell index="4" id="95cca932" type="code" lines="3" outputs="1">')
+		expect(firstText(summary)).toContain('<output index="0" type="execute_result" mime="text/plain">')
 	} finally {
 		await fixture.cleanup()
 	}
@@ -19,7 +19,7 @@ test("runNotebookSummary reports cleared outputs", async () => {
 test("runNotebookSummary works on fixture path", async () => {
 	const result = await notebookSummaryTool.run({ path: join(FIXTURE_DIR, "lovely-history.ipynb") })
 	expect(firstText(result)).toContain('<cell index="0" id="20735603" type="md"')
-	expect(firstText(result)).toContain('<output cell_id="4ea6855e" index="0" type="stream" name="stdout" />')
+	expect(firstText(result)).toContain('<output index="0" type="stream" name="stdout">')
 })
 
 test("runNotebookSummary supports line slices", async () => {

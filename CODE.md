@@ -30,9 +30,21 @@ Root `README.md` is the project entry point; each package carries its own npm-fa
 - Helpers take 0-based indexes only; selector resolution lives in the tool layer.
 - Id policy: no-id notebooks stay no-id, missing ids are never backfilled, inserted cells
   get ids only when the notebook already uses ids or `nbformat_minor >= 5`.
-- Summary format: one `meta` line, then a pseudo-XML header per cell (with `atts=`,
-  `n_exec` when present, `id` only when stored), a source preview, then one header per output
-  MIME variant with text-like previews.
+- Summary format: one `meta` line, then a pseudo-XML `<cell>` element per cell (with `atts=`,
+  `n_exec` when present, `id` only when stored) containing its source preview and one `<output>`
+  element per output MIME variant. Elements self-close only when genuinely empty (image-only
+  output variants), so preview text that looks like markup — Python reprs such as
+  `<module.Class>` are the common case — cannot be read as structure. Containment is why output
+  elements carry no `cell_id`.
+- `notebook_read_cell_output` on a rich output with no `mime` uses the same element shape, one
+  `<output mime=...>` per variant; image and empty variants self-close, which also tells the
+  model an image existed under `includeImages: false`.
+- `outputIndex` is optional: omitted means the cell's only output, and more than one output is an
+  error naming the count, never a silent pick. 94% of output-bearing cells in the fixtures and
+  the lovely-tensors/lovely-numpy notebooks have exactly one output.
+- Two conventions, deliberately distinct: pseudo-XML elements for structure, `[...]` notes for
+  inline or appended annotations (`[image: mime/type]`, `[N more lines]`, `[Image omitted: ...]`)
+  that never claim to contain anything.
 - Previews (source and output alike) are bounded three ways: 5 lines with a `[N more lines]`
   marker, 500 chars per line, and `data:` image URIs replaced by `[image: mime/type]` — one
   embedded image is a single line, so the line cap alone does not bound it. `sourceLines` still

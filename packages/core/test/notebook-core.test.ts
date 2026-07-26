@@ -263,13 +263,15 @@ describe("notebook core", () => {
 		expect(() => clearCellOutputs(notebook, 0)).toThrow("Cell is not code: index 0")
 	})
 
-	test("formatNotebookSummary uses xml-ish cell headers plus raw previews", () => {
+	test("formatNotebookSummary nests previews and outputs inside cell elements", () => {
 		const summary = summarizeNotebook(parseNotebook(createNotebookText()))
 		const formatted = formatNotebookSummary(summary)
 		expect(formatted).toContain("meta nbformat=4.5 kernel=python3 cells=2 language=python")
-		expect(formatted).toContain('<cell index="0" id="intro" type="md" lines="2" />\n# Title\nMore text\n')
-		expect(formatted).toContain('<cell index="1" id="code-1" type="code" lines="2" n_exec="7" outputs="1" />')
-		expect(formatted).toContain('<output cell_id="code-1" index="0" type="stream" />')
+		expect(formatted).toContain('<cell index="0" id="intro" type="md" lines="2">\n# Title\nMore text\n</cell>')
+		expect(formatted).toContain('<cell index="1" id="code-1" type="code" lines="2" n_exec="7" outputs="1">')
+		// Outputs live inside their cell, so they no longer repeat the cell id.
+		expect(formatted).toContain('<output index="0" type="stream" />')
+		expect(formatted).not.toContain("cell_id=")
 	})
 
 	test("summary handles missing metadata and missing source", () => {
@@ -352,12 +354,14 @@ describe("notebook core", () => {
 			})
 		)
 		const formatted = formatNotebookSummary(summarizeNotebook(notebook))
-		expect(formatted).toContain('<output cell_id="c" index="0" type="stream" name="stdout" />\na\nb\nc\nd\ne\n[1 more lines]')
-		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="text/plain" n_exec="3" />\n42\n')
-		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="text/html" n_exec="3" />\n<b>42</b>')
-		expect(formatted).toContain('<output cell_id="c" index="1" type="execute_result" mime="image/png" n_exec="3" />')
-		expect(formatted).not.toContain('mime="image/png" n_exec="3" />\nAAAA')
-		expect(formatted).toContain('<output cell_id="c" index="2" type="error" ename="ValueError" />\ntb1\ntb2\n')
+		expect(formatted).toContain('<output index="0" type="stream" name="stdout">\na\nb\nc\nd\ne\n[1 more lines]\n</output>')
+		expect(formatted).toContain('<output index="1" type="execute_result" mime="text/plain" n_exec="3">\n42\n</output>')
+		// Content that looks like markup stays unambiguous because it sits inside an element.
+		expect(formatted).toContain('<output index="1" type="execute_result" mime="text/html" n_exec="3">\n<b>42</b>\n</output>')
+		// An image-only variant really is empty, so it stays self-closing.
+		expect(formatted).toContain('<output index="1" type="execute_result" mime="image/png" n_exec="3" />')
+		expect(formatted).not.toContain("AAAA")
+		expect(formatted).toContain('<output index="2" type="error" ename="ValueError">\ntb1\ntb2\n</output>')
 	})
 
 	test("saveNotebook writes deterministic json with trailing newline", async () => {
@@ -455,7 +459,7 @@ describe("notebook core", () => {
 	test("summary omits null execution counts from formatted rows", async () => {
 		const notebook = await loadNotebook(join(FIXTURE_DIR, "lovely-history.ipynb"))
 		const formatted = formatNotebookSummary(summarizeNotebook(notebook))
-		expect(formatted).toContain('<cell index="1" id="57d6942b" type="code" lines="3" outputs="0" />')
+		expect(formatted).toContain('<cell index="1" id="57d6942b" type="code" lines="3" outputs="0">')
 		expect(formatted).not.toContain("n_exec=null")
 	})
 

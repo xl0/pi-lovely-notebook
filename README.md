@@ -39,7 +39,7 @@ Notebooks are nbformat 4 only. Every tool acts on one cell, selected by `cellId`
 | `notebook_move` | Move a cell relative to another |
 | `notebook_merge` | Merge with the adjacent same-type cell |
 | `notebook_clear_outputs` | Drop outputs, keep source and execution count |
-| `notebook_read_cell_output` | One output, as text or image |
+| `notebook_read_cell_output` | One output, as text or image (index optional for single-output cells) |
 | `notebook_read_cell_attachment` | One cell attachment, by key |
 
 Mutations preserve cell ids, metadata, and outputs. Notebooks without cell ids stay that way —
@@ -52,18 +52,27 @@ so one call is enough to plan an edit:
 
 ```txt
 <meta nbformat=4.5 kernel=python3 cells=12 />
-<cell index="0" id="20735603" type="md" lines="1" />
+<cell index="0" id="20735603" type="md" lines="1">
 # 📜 IPython's history obsession
-<cell index="1" id="57d6942b" type="code" lines="3" outputs="0" />
+</cell>
+<cell index="1" id="57d6942b" type="code" lines="3" outputs="0">
 # |hide
 import torch
 import gc
-<cell index="3" id="ffd208cf" type="code" lines="2" outputs="1" />
+</cell>
+<cell index="3" id="ffd208cf" type="code" lines="2" outputs="1">
 # |eval: false
 torch.cuda.memory_allocated()
-<output cell_id="ffd208cf" index="0" type="execute_result" mime="text/plain" />
+<output index="0" type="execute_result" mime="text/plain">
 0
+</output>
+</cell>
 ```
+
+Outputs nest inside their cell, and preview text sits inside the element that owns it — so a
+line of output like `<lovely_tensors.repr_rgb.RGBProxy>` (a plain Python repr) can't be mistaken
+for structure. A tag closes itself only when it really has no content, such as an image-only
+output variant.
 
 Previews are capped at 5 lines; the summary itself is paginated with `lineOffset`/`lineLimit`.
 Images in outputs, attachments, and markdown `data:` URIs are returned as image content —
