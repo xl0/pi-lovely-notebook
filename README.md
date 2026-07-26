@@ -29,7 +29,7 @@ Notebooks are nbformat 4 only. Every tool acts on one cell, selected by `cellId`
 | Tool | Does |
 | --- | --- |
 | `notebook_summary` | Structure of the whole notebook: cells, ids, outputs, short previews |
-| `notebook_create` | New empty notebook |
+| `notebook_create` | New empty notebook (refuses to overwrite) |
 | `notebook_read_cell` | One cell's source, optionally line-sliced |
 | `notebook_write_cell` | Replace one cell's source, optionally change its type |
 | `notebook_edit_cell` | Exact string replacements inside one cell |

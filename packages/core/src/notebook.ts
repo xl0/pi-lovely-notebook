@@ -439,7 +439,12 @@ export async function saveNotebook(path: string, notebook: Notebook): Promise<vo
 	await writeFile(path, serializeNotebook(notebook), "utf8")
 }
 
-export function createNotebook(language = "python3"): Notebook {
+/**
+ * `language` is the programming language (`metadata.language_info.name`), e.g. `python` — not a
+ * kernel name like `python3`. No `kernelspec` is written: which kernel exists is not ours to claim,
+ * and Jupyter/VSCode fill it in when the user picks one.
+ */
+export function createNotebook(language = "python"): Notebook {
 	return {
 		cells: [],
 		metadata: {

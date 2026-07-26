@@ -177,7 +177,7 @@ const notebookTools: NotebookToolEntry[] = [
 	{
 		tool: notebookCreateTool,
 		label: "Notebook Create",
-		promptSnippet: "Create or overwrite an empty .ipynb notebook."
+		promptSnippet: "Create a new empty .ipynb notebook. Fails if the path already exists."
 	},
 	{
 		tool: notebookReadCellTool,
