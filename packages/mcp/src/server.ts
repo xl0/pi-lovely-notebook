@@ -21,6 +21,8 @@ import {
 	notebookWriteCellTool
 } from "@xl0/lovely-notebook"
 import { Value } from "typebox/value"
+// The version the host reports must track the published one; npm always ships package.json.
+import packageJson from "../package.json" with { type: "json" }
 
 const notebookTools = [
 	notebookSummaryTool,
@@ -65,7 +67,7 @@ function capImages(content: NotebookToolContent): NotebookToolContent {
 }
 
 const server = new Server(
-	{ name: "lovely-notebook", version: "0.1.0" },
+	{ name: "lovely-notebook", version: packageJson.version },
 	{
 		capabilities: { tools: {} },
 		instructions: notebookToolGuidelines.join("\n")
