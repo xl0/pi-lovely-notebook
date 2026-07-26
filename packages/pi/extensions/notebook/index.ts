@@ -230,7 +230,8 @@ const notebookTools: NotebookToolEntry[] = [
 	{
 		tool: notebookReadOutputTool,
 		label: "Notebook Read Cell Output",
-		promptSnippet: "Read a specific cell output by index. Use notebook_summary first to discover available outputs and their mime types."
+		promptSnippet:
+			"Read one cell output; omit outputIndex when the cell has a single output. Use notebook_summary first to discover available outputs and their mime types."
 	},
 	{
 		tool: notebookReadCellAttachmentTool,

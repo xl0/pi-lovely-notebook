@@ -25,7 +25,7 @@ pi -e npm:@xl0/pi-lovely-notebook           # try it for one run
 | `notebook_move` | Move a cell relative to another |
 | `notebook_merge` | Merge with the adjacent same-type cell |
 | `notebook_clear_outputs` | Drop outputs, keep source and execution count |
-| `notebook_read_cell_output` | One output, as text or image |
+| `notebook_read_cell_output` | One output, as text or image (index optional for single-output cells) |
 | `notebook_read_cell_attachment` | One cell attachment, by key |
 
 nbformat 4 only. Each tool acts on one cell, selected by `cellId` or 0-based `index`.
@@ -37,14 +37,21 @@ source and output previews:
 
 ```txt
 <meta nbformat=4.5 kernel=python3 cells=12 />
-<cell index="0" id="20735603" type="md" lines="1" />
+<cell index="0" id="20735603" type="md" lines="1">
 # 📜 IPython's history obsession
-<cell index="3" id="ffd208cf" type="code" lines="2" outputs="1" />
+</cell>
+<cell index="3" id="ffd208cf" type="code" lines="2" outputs="1">
 # |eval: false
 torch.cuda.memory_allocated()
-<output cell_id="ffd208cf" index="0" type="execute_result" mime="text/plain" />
+<output index="0" type="execute_result" mime="text/plain">
 0
+</output>
+</cell>
 ```
+
+Outputs nest inside their cell and previews sit inside the element that owns them, so output
+text that looks like markup — `<lovely_tensors.repr_rgb.RGBProxy>`, the usual Python repr —
+can't be confused with structure.
 
 ## In the TUI
 
