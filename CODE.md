@@ -23,10 +23,18 @@ Root `README.md` is the project entry point; each package carries its own npm-fa
 `packages/core/src/notebook.ts` — pure notebook JSON operations, no I/O beyond load/save.
 
 - nbformat 4 only; cell types `code`, `markdown`, `raw`.
-- On parse everything is normalized to typed internal shapes: source to one `string`,
-  metadata to a typed object, attachments to typed MIME bundles, outputs to a typed union
-  (unknown output fields preserved). Save writes Jupyter-style JSON back:
-  source as `string[]`, 1-space indent, trailing newline.
+- On parse everything is normalized to typed internal shapes: source and stream `text` to one
+  `string`, metadata to a typed object, attachments to typed MIME bundles, outputs to a typed
+  union (unknown output fields preserved).
+- Save reproduces Jupyter's canonical form byte for byte: keys sorted at every level, 1-space
+  indent, `source` and stream `text` back to `string[]`, trailing newline. Same rules as
+  nbformat's `JSONWriter` (`sort_keys=True`) and VSCode's `sortObjectPropertiesRecursively`.
+  Without this a one-cell edit rewrote ~770 lines of a 13k-line notebook and buried its own diff.
+  Mime-bundle and attachment values are never re-split, since parsing leaves them untouched;
+  nbformat would split `text/*`, `application/javascript` and `image/svg+xml`.
+- The input file's indent is detected on parse and reused on save (Jupyter writes 1 space, Colab
+  2), kept in a `WeakMap` keyed by the notebook so it never reaches the file. VSCode does the same
+  via `detectIndent` plus in-memory `indentAmount` metadata.
 - Helpers take 0-based indexes only; selector resolution lives in the tool layer.
 - Id policy: no-id notebooks stay no-id, missing ids are never backfilled, inserted cells
   get ids only when the notebook already uses ids or `nbformat_minor >= 5`.
@@ -114,6 +122,10 @@ same-type cell and keeps the anchor id.
 - Fixtures in `packages/core/test/fixtures/`, including `subtly-corrupt-images.ipynb`
   (valid-looking PNG base64 with undecodable IDAT) to pin the raw-vs-omitted image split.
 - `bun run tool -- <tool-name> '<json-args>'` prints raw tool output without launching Pi.
+- `bun run check:notebooks [root]` runs the whole core against every `.ipynb` under a tree
+  (default: this repo's parent), on copies: parse, summary, cell/output/attachment reads, then a
+  save that must not lose content, churn a canonical file, or reformat unstably. 312 real
+  notebooks (nbformat 4.0-4.5, 136MB) pass in ~3s.
 - `bun run check` = `tsgo --noEmit` + `biome check`. Biome 2.4.14, git-aware, 140 cols, tabs,
   LF, semicolons as needed. tsconfig is strict (`noUncheckedIndexedAccess`,
   `exactOptionalPropertyTypes`, `noPropertyAccessFromIndexSignature`, ...) and uses `bun-types`.
@@ -146,6 +158,6 @@ cellId/index selectors. Outputs are preserved on mutation. No `NotebookSession` 
 - Not published to npm yet; READMEs already document the npm install paths. Publish core first
   so the `^0.1.0` core dep in the Pi/MCP packages resolves.
 - Pi surfaces raw schema-validator messages instead of friendly allowed-value hints.
-- Save always renormalizes notebook JSON formatting, even when it only aims to match Jupyter.
+- Notebooks not already in Jupyter's canonical form are reformatted once on first save.
 - No-id notebooks depend on index selectors.
 - Execution is not implemented; see `PLAN.md`.
