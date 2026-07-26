@@ -1,4 +1,3 @@
-import { access } from "node:fs/promises"
 import { type Static, type TUnsafe, Type } from "typebox"
 import type { Notebook } from "./notebook"
 import {
@@ -18,6 +17,7 @@ import {
 	readCellAttachment,
 	readCellOutput,
 	resolveCellIndex,
+	saveNewNotebook,
 	saveNotebook,
 	sliceCellSource,
 	summarizeNotebook,
@@ -115,16 +115,9 @@ const notebookCreateParams = Type.Object({
 
 async function runNotebookCreate(params: Static<typeof notebookCreateParams>): Promise<NotebookToolContent> {
 	const language = params.language ?? "python"
-	// Never clobber a notebook: an empty replacement destroys every cell and output, unrecoverably.
-	// Check-then-write is not atomic, but both adapters serialize tool calls (pi's file mutation
-	// queue, the MCP server's global queue), so losing the race needs a foreign process creating
-	// this exact path in the microseconds in between. Not worth a lock file.
-	const exists = await access(params.path).then(
-		() => true,
-		() => false
-	)
-	if (exists) throw new Error(`Notebook already exists: ${params.path}. Delete it first to replace it.`)
-	await saveNotebook(params.path, createNotebook(language))
+	// Exclusive create, so an existing notebook is never clobbered by an empty one: the kernel
+	// refuses atomically, with no window between checking and writing.
+	await saveNewNotebook(params.path, createNotebook(language))
 	return [{ type: "text", text: `Created notebook ${params.path} with language ${language}.` }]
 }
 

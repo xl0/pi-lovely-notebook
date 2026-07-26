@@ -483,6 +483,11 @@ export async function saveNotebook(path: string, notebook: Notebook): Promise<vo
 	await writeFile(path, serializeNotebook(notebook), "utf8")
 }
 
+/** Writes with `wx`: an existing path fails with EEXIST in the kernel, never clobbered. */
+export async function saveNewNotebook(path: string, notebook: Notebook): Promise<void> {
+	await writeFile(path, serializeNotebook(notebook), { encoding: "utf8", flag: "wx" })
+}
+
 /**
  * `language` is the programming language (`metadata.language_info.name`), e.g. `python` — not a
  * kernel name like `python3`. No `kernelspec` is written: which kernel exists is not ours to claim,

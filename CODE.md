@@ -108,8 +108,9 @@ Tools: `notebook_summary`, `notebook_create`, `notebook_read_cell`, `notebook_wr
 `notebook_read_cell_attachment`. All are single-cell and accept `cellId` or 0-based `index`
 (`notebook_insert.index = -1` appends).
 
-Notable tool semantics: `notebook_create` refuses an existing path, since replacing a notebook
-with an empty one destroys every cell and output, and writes `language_info.name` (a language
+Notable tool semantics: `notebook_create` writes with `wx` so an existing path fails with EEXIST
+in the kernel, never through a check-then-write window — replacing a notebook with an empty one
+destroys every cell and output. It writes `language_info.name` (a language
 like `python`, not a kernel name like `python3`) while leaving `kernelspec` to the editor; read returns raw source only (metadata is
 summary-only); markdown `data:` URI images become `[image: mime/type]` markers plus image
 content; type changes clear fields invalid for the target type.

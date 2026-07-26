@@ -35,8 +35,9 @@ test("runNotebookCreate accepts a language and refuses to clobber an existing fi
 		await notebookCreateTool.run({ path: customPath, language: "r" })
 		expect((await loadNotebook(customPath)).metadata?.language_info?.name).toBe("r")
 
+		// Exclusive create: the write itself refuses, so there is no check-then-write window.
 		await expect(notebookCreateTool.run({ path: fixture.path, language: "r" })).rejects.toThrow(
-			`Notebook already exists: ${fixture.path}. Delete it first to replace it.`
+			`EEXIST: file already exists, open '${fixture.path}'`
 		)
 		expect(await readFile(fixture.path, "utf8")).toBe("already here")
 	} finally {
