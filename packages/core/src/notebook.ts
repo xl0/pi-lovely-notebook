@@ -424,15 +424,52 @@ export function parseNotebook(text: string): Notebook {
 		})
 	}
 
-	return { ...notebook, cells } as Notebook
+	const parsed = { ...notebook, cells } as Notebook
+	notebookIndents.set(parsed, detectIndent(text))
+	return parsed
 }
 
 export async function loadNotebook(path: string): Promise<Notebook> {
 	return parseNotebook(await readFile(path, "utf8"))
 }
 
+/**
+ * Indent of the file a notebook was parsed from, so saving reuses it: Jupyter writes 1 space,
+ * Colab writes 2, and reflowing either way rewrites every line. VSCode does the same thing by
+ * stashing `indentAmount` in in-memory metadata; a side table keeps it out of the file.
+ */
+const notebookIndents = new WeakMap<Notebook, string>()
+
+function detectIndent(text: string): string {
+	return /\n([ \t]+)"/.exec(text.slice(0, 1000))?.[1] ?? " "
+}
+
+/** Keys sorted at every level, the way nbformat (sort_keys=True) and VSCode's ipynb serializer write them. */
+function sortKeysRecursively(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(sortKeysRecursively)
+	if (value === null || typeof value !== "object") return value
+	const source = value as Record<string, unknown>
+	const sorted: Record<string, unknown> = {}
+	for (const key of Object.keys(source).sort()) sorted[key] = sortKeysRecursively(source[key])
+	return sorted
+}
+
+/**
+ * Jupyter's canonical on-disk form: sorted keys, 1-space indent, multiline text as line lists,
+ * trailing newline. Matching it keeps a one-cell edit from rewriting the whole file in git.
+ *
+ * Only `source` and stream `text` are re-split, because those are the two values parsing joins.
+ * Mime-bundle and attachment values are kept exactly as found, so notebooks written by other
+ * tools do not get reshaped.
+ */
 function serializeNotebook(notebook: Notebook): string {
-	return `${JSON.stringify({ ...notebook, cells: notebook.cells.map(cell => ({ ...cell, source: sourceToLines(cell.source) })) }, null, 1)}\n`
+	const cells = notebook.cells.map(cell => {
+		const outputs = cell.outputs?.map(output =>
+			output.output_type === "stream" && output.text !== undefined ? { ...output, text: sourceToLines(output.text) } : output
+		)
+		return { ...cell, source: sourceToLines(cell.source), ...(outputs === undefined ? {} : { outputs }) }
+	})
+	return `${JSON.stringify(sortKeysRecursively({ ...notebook, cells }), null, notebookIndents.get(notebook) ?? " ")}\n`
 }
 
 export async function saveNotebook(path: string, notebook: Notebook): Promise<void> {

@@ -20,7 +20,7 @@ import {
 	summarizeNotebook,
 	writeCellSource
 } from "../src/notebook"
-import { createNotebookText, FIXTURE_DIR, readAllCells, readCellById } from "./helpers"
+import { copyFixture, createNotebookText, createTempNotebook, FIXTURE_DIR, readAllCells, readCellById } from "./helpers"
 
 describe("notebook core", () => {
 	test("parse + summary", () => {
@@ -379,6 +379,45 @@ describe("notebook core", () => {
 			expect(notebook.cells[0]?.source).toBe("# Title\nMore text\n")
 		} finally {
 			await rm(dir, { recursive: true, force: true })
+		}
+	})
+
+	test("saveNotebook rewrites Jupyter-written notebooks byte for byte", async () => {
+		// A load/save cycle must not touch a single byte, or every edit buries its own diff.
+		for (const name of ["lovely-history.ipynb", "lovely-test-no-ids.ipynb"]) {
+			const original = await readFile(join(FIXTURE_DIR, name), "utf8")
+			const fixture = await copyFixture(name)
+			try {
+				await saveNotebook(fixture.path, await loadNotebook(fixture.path))
+				expect(await readFile(fixture.path, "utf8")).toBe(original)
+			} finally {
+				await fixture.cleanup()
+			}
+		}
+	})
+
+	test("saveNotebook keeps the indent the notebook was written with", async () => {
+		// Colab writes 2-space indent; reflowing it to Jupyter's 1 space would rewrite every line.
+		const fixture = await createTempNotebook("colab.ipynb", `${JSON.stringify(JSON.parse(createNotebookText()), null, 2)}\n`)
+		try {
+			await saveNotebook(fixture.path, await loadNotebook(fixture.path))
+			const lines = (await readFile(fixture.path, "utf8")).split("\n")
+			expect(lines[1]?.startsWith('  "')).toBe(true)
+		} finally {
+			await fixture.cleanup()
+		}
+	})
+
+	test("saveNotebook converges on the canonical form and then stays put", async () => {
+		// This fixture is hand-written with unsorted keys: one save canonicalizes it, the next is a no-op.
+		const fixture = await copyFixture("subtly-corrupt-images.ipynb")
+		try {
+			await saveNotebook(fixture.path, await loadNotebook(fixture.path))
+			const canonical = await readFile(fixture.path, "utf8")
+			await saveNotebook(fixture.path, await loadNotebook(fixture.path))
+			expect(await readFile(fixture.path, "utf8")).toBe(canonical)
+		} finally {
+			await fixture.cleanup()
 		}
 	})
 
