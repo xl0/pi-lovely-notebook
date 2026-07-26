@@ -28,14 +28,20 @@
 	],
 	"files": [
 		"src/",
+		"dist/",
 		"README.md",
 		"LICENSE"
 	],
 	"exports": {
-		".": "./src/index.ts"
+		".": {
+			"bun": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
 	},
 	"scripts": {
-		"release": "bun publish --access public"
+		"build": "rm -rf dist && bun build src/index.ts --outdir dist --target node --format esm --external typebox && tsgo -p tsconfig.build.json",
+		"release": "bun run build && bun publish --access public"
 	},
 	"devDependencies": {
 		"typebox": "1.1.38"

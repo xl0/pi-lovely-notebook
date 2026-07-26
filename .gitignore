@@ -4,3 +4,4 @@ tmp/
 .pi/xl0-lovely-ide.json
 .vscode/
 EXECUTION.md
+dist/

@@ -30,14 +30,16 @@
 	],
 	"files": [
 		"src/",
+		"dist/",
 		"README.md",
 		"LICENSE"
 	],
 	"bin": {
-		"lovely-notebook-mcp": "./src/server.ts"
+		"lovely-notebook-mcp": "./dist/bin.js"
 	},
 	"scripts": {
-		"release": "bun publish --access public"
+		"build": "rm -rf dist && bun build src/bin.ts --outdir dist --target node --format esm --external @modelcontextprotocol/sdk --external typebox --external @xl0/lovely-notebook",
+		"release": "bun run build && bun publish --access public"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.16.0",

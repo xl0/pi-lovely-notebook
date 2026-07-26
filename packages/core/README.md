@@ -5,10 +5,11 @@ core behind [`@xl0/pi-lovely-notebook`](https://www.npmjs.com/package/@xl0/pi-lo
 (pi extension) and [`@xl0/lovely-notebook-mcp`](https://www.npmjs.com/package/@xl0/lovely-notebook-mcp)
 (MCP server). Use it directly to expose the same notebook tools in your own harness.
 
-Ships TypeScript source, no build step — run it under bun. `typebox` is a peer dependency.
+Ships built ESM plus types for node, and the TypeScript source for bun (the `bun` export
+condition picks it up). `typebox` is a peer dependency.
 
 ```bash
-bun add @xl0/lovely-notebook typebox
+npm add @xl0/lovely-notebook typebox    # or: bun add ...
 ```
 
 ## Tool descriptors
