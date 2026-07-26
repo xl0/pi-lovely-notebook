@@ -30,6 +30,7 @@
 		"format:check": "biome format .",
 		"biome:check": "biome check .",
 		"tool": "bun scripts/run-notebook-tool.ts",
+		"check:notebooks": "bun scripts/check-notebooks.ts",
 		"link:pi": "for p in ai:pi-ai coding-agent:pi-coding-agent tui:pi-tui; do rm -rf \"node_modules/@earendil-works/${p#*:}\" && ln -s \"$PWD/../pi-mono/packages/${p%%:*}\" \"node_modules/@earendil-works/${p#*:}\"; done"
 	},
 	"devDependencies": {
