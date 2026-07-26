@@ -3,7 +3,7 @@
 Maintain 2 important files in sync with the codebase:
 
 - `CODE.md`: An in-depth summary of the current state of the codebase.
-The file should contain high-level view of the code and only non-obvious implementation details. Don't overload it with small details. Avoid very long lines.
+The file should contain high-level view of the code and only non-obvious implementation details. Don't overload it with small details.
 
 - `PLAN.md`: High-level plan in plain English, followed by TODO with [x] boxes.
 TODO items may be sections (## [x] Section) or paragraphs - don't make it rigid.
