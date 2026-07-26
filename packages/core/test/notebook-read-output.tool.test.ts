@@ -29,6 +29,34 @@ test("runNotebookReadOutput labels each mime variant and wraps repr-like text", 
 	}
 })
 
+test("runNotebookReadOutput treats svg as an image, and returns the markup only when asked", async () => {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg">\n${"  <path d='M0 0' />\n".repeat(200)}</svg>`
+	const fixture = await createTempNotebook(
+		"plot.ipynb",
+		JSON.stringify({
+			nbformat: 4,
+			nbformat_minor: 5,
+			cells: [
+				{
+					cell_type: "code",
+					id: "c",
+					source: "plot()\n",
+					outputs: [{ output_type: "display_data", data: { "image/svg+xml": svg, "text/plain": ["<Figure>"] } }]
+				}
+			]
+		})
+	)
+
+	try {
+		const result = await notebookReadOutputTool.run({ path: fixture.path, cellId: "c" })
+		expect(firstText(result)).toBe('<output mime="image/svg+xml" />\n<output mime="text/plain">\n<Figure>\n</output>')
+		const markup = await notebookReadOutputTool.run({ path: fixture.path, cellId: "c", mime: "image/svg+xml", lineLimit: 1 })
+		expect(firstText(markup)).toBe('<svg xmlns="http://www.w3.org/2000/svg">\n[201 more lines. Use offset=2 to continue.]')
+	} finally {
+		await fixture.cleanup()
+	}
+})
+
 test("runNotebookReadOutput uses 0-based output indices", async () => {
 	const path = join(FIXTURE_DIR, "lovely-history.ipynb")
 	const result = await notebookReadOutputTool.run({ path, index: 4, outputIndex: 0, mime: "text/plain" })

@@ -73,7 +73,7 @@ function exerciseReads(path: string, notebook: Notebook) {
 
 	notebook.cells.forEach((cell, index) => {
 		const read = readCellAtIndex(notebook, index)
-		sliceCellSource(read.source, 0, 5)
+		sliceCellSource(read.source, 1, 5)
 		if (read.type === "markdown") extractDataUriImages(read.source)
 
 		for (const key of Object.keys(cell.attachments ?? {})) {

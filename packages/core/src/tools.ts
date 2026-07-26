@@ -10,6 +10,7 @@ import {
 	extractDataUriImages,
 	formatNotebookSummary,
 	insertCell,
+	isBinaryImageMime,
 	loadNotebook,
 	mergeCell,
 	moveCell,
@@ -40,11 +41,11 @@ export type NotebookToolContent = (NotebookTextContent | NotebookImageContent)[]
 /** Model guidance shared by all adapters (pi prompt guidelines, MCP server instructions). */
 export const notebookToolGuidelines = [
 	"Notebook tools: use notebook_summary first to discover structure and cell ids.",
-	"Notebook tools: cell index selectors are 0-based; for notebooks without stored cell ids, use index selectors.",
+	"Notebook tools: cell and output index selectors are 0-based, line offsets are 1-based like any file read; for notebooks without stored cell ids, use index selectors.",
 	"notebook_change_cell_type and notebook_write_cell type changes clear fields incompatible with the target type.",
 	"notebook_edit_cell: replacements must match exactly and uniquely.",
 	"notebook_insert: index -1 appends.",
-	"notebook_merge: cells must be adjacent and the same type; the anchor cell id is preserved.",
+	"notebook_merge: cells must be adjacent and the same type; the anchor cell id and attachments of both cells are kept, the removed cell's outputs are dropped.",
 	"notebook_clear_outputs: preserves source and execution count."
 ]
 
@@ -58,8 +59,15 @@ function StringEnum<T extends readonly string[]>(values: T, options?: { descript
 	})
 }
 
-function pushImageContent(content: NotebookToolContent, image: { mime: string; data: string }) {
-	content.push({ type: "image", data: image.data, mimeType: image.mime })
+function pushImageContent(content: NotebookToolContent, image: { mime: string; data: string }, lineOffset?: number, lineLimit?: number) {
+	if (isBinaryImageMime(image.mime)) {
+		content.push({ type: "image", data: image.data, mimeType: image.mime })
+		return
+	}
+	// SVG is markup: as image content it only makes the host's resizer fail with a misleading
+	// "too large" note. nbformat stores it as text, JupyterLab base64s anything pasted; take both.
+	const markup = image.data.trimStart().startsWith("<") ? image.data : Buffer.from(image.data, "base64").toString("utf8")
+	content.push({ type: "text", text: sliceCellSource(markup, lineOffset, lineLimit) })
 }
 
 function cellSelectionText(cellId?: string, index?: number): string {
@@ -81,7 +89,7 @@ function resolveSelectedCellIndex(notebook: Notebook, cellId?: string, index?: n
 
 const notebookSummaryParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
-	lineOffset: Type.Optional(Type.Integer({ minimum: 0, description: "Inclusive line offset within the formatted summary." })),
+	lineOffset: Type.Optional(Type.Integer({ minimum: 1, description: "1-based line number to start reading the summary from." })),
 	lineLimit: Type.Optional(Type.Integer({ minimum: 0, description: "Maximum number of summary lines to read from the offset." }))
 })
 
@@ -128,7 +136,7 @@ const notebookReadCellParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id to read." })),
 	index: Type.Optional(Type.Integer({ minimum: 0, description: "0-based cell index to read." })),
-	lineOffset: Type.Optional(Type.Integer({ minimum: 0, description: "Inclusive source line offset within the cell." })),
+	lineOffset: Type.Optional(Type.Integer({ minimum: 1, description: "1-based line number to start reading the cell source from." })),
 	lineLimit: Type.Optional(Type.Integer({ minimum: 0, description: "Maximum number of source lines to read from the offset." })),
 	includeImages: Type.Optional(Type.Boolean({ description: "Whether to include image content. Defaults to true." }))
 })
@@ -340,10 +348,11 @@ async function runNotebookMerge(params: Static<typeof notebookMergeParams>): Pro
 	const result = await mutateNotebook(params.path, notebook =>
 		mergeCell(notebook, resolveSelectedCellIndex(notebook, params.cellId, params.index), params.direction)
 	)
+	const dropped = result.droppedOutputs === 0 ? "" : ` Dropped ${result.droppedOutputs} output(s) that belonged to the removed cell.`
 	return [
 		{
 			type: "text",
-			text: `Merged cell ${result.removed.id ?? `index ${result.removed.index}`} into ${cellSelectionText(params.cellId, params.index)} in ${params.path}.`
+			text: `Merged cell ${result.removed.id ?? `index ${result.removed.index}`} into ${cellSelectionText(params.cellId, params.index)} in ${params.path}.${dropped}`
 		}
 	]
 }
@@ -368,7 +377,7 @@ const notebookReadOutputParams = Type.Object({
 				"Mime type to select from rich outputs (display_data/execute_result). If omitted, all displayable text and image variants are returned. E.g. 'text/plain', 'image/png', 'image/svg+xml'."
 		})
 	),
-	lineOffset: Type.Optional(Type.Integer({ minimum: 0, description: "Inclusive line offset within the text output." })),
+	lineOffset: Type.Optional(Type.Integer({ minimum: 1, description: "1-based line number to start reading the text output from." })),
 	lineLimit: Type.Optional(Type.Integer({ minimum: 0, description: "Maximum number of lines to read from the offset." })),
 	includeImages: Type.Optional(Type.Boolean({ description: "Whether to include image content. Defaults to true." }))
 })
@@ -404,14 +413,16 @@ const notebookReadCellAttachmentParams = Type.Object({
 	path: Type.String({ description: "Path to an .ipynb notebook." }),
 	cellId: Type.Optional(Type.String({ description: "Cell id." })),
 	index: Type.Optional(Type.Integer({ minimum: 0, description: "0-based cell index." })),
-	key: Type.String({ description: "Attachment key (filename)." })
+	key: Type.String({ description: "Attachment key (filename)." }),
+	lineOffset: Type.Optional(Type.Integer({ minimum: 1, description: "1-based line number, for text attachments such as SVG." })),
+	lineLimit: Type.Optional(Type.Integer({ minimum: 0, description: "Maximum number of lines to read from the offset." }))
 })
 
 async function runNotebookReadCellAttachment(params: Static<typeof notebookReadCellAttachmentParams>): Promise<NotebookToolContent> {
 	const notebook = await loadNotebook(params.path)
 	const result = readCellAttachment(notebook, resolveSelectedCellIndex(notebook, params.cellId, params.index), params.key)
 	const content: NotebookToolContent = []
-	pushImageContent(content, result)
+	pushImageContent(content, result, params.lineOffset, params.lineLimit)
 	return content
 }
 
