@@ -116,6 +116,9 @@ const notebookCreateParams = Type.Object({
 async function runNotebookCreate(params: Static<typeof notebookCreateParams>): Promise<NotebookToolContent> {
 	const language = params.language ?? "python"
 	// Never clobber a notebook: an empty replacement destroys every cell and output, unrecoverably.
+	// Check-then-write is not atomic, but both adapters serialize tool calls (pi's file mutation
+	// queue, the MCP server's global queue), so losing the race needs a foreign process creating
+	// this exact path in the microseconds in between. Not worth a lock file.
 	const exists = await access(params.path).then(
 		() => true,
 		() => false
