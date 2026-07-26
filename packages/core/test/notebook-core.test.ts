@@ -11,6 +11,8 @@ import {
 	formatNotebookSummary,
 	insertCell,
 	loadNotebook,
+	MAX_READ_BYTES,
+	MAX_READ_LINES,
 	mergeCell,
 	moveCell,
 	normalizeSource,
@@ -490,9 +492,36 @@ describe("notebook core", () => {
 	test("sliceCellSource slices raw source by line", () => {
 		const source = "a\nb\nc\n"
 		expect(sliceCellSource(source)).toBe(source)
-		expect(sliceCellSource(source, 1, 1)).toBe("b\n[1 more lines. Use offset=2 to continue.]")
-		expect(() => sliceCellSource(source, -1)).toThrow("Invalid lineOffset: -1")
-		expect(() => sliceCellSource(source, 0, -1)).toThrow("Invalid lineLimit: -1")
+		// Line offsets are 1-based, like pi's and Claude Code's file reads.
+		expect(sliceCellSource(source, 1, 1)).toBe("a\n[2 more lines. Use offset=2 to continue.]")
+		expect(sliceCellSource(source, 2, 1)).toBe("b\n[1 more lines. Use offset=3 to continue.]")
+		expect(() => sliceCellSource(source, 0)).toThrow("Invalid lineOffset: 0 (1-based line number)")
+		expect(() => sliceCellSource(source, 1, -1)).toThrow("Invalid lineLimit: -1")
+		expect(() => sliceCellSource(source, 5)).toThrow("lineOffset out of range: 5 (3 lines total)")
+	})
+
+	test("sliceCellSource says so instead of returning nothing", () => {
+		expect(sliceCellSource("a\nb\nc\n", 4)).toBe("[No lines at offset 4: 3 lines total]")
+		expect(sliceCellSource("")).toBe("[Empty]")
+	})
+
+	test("sliceCellSource caps unbounded reads by lines and by bytes", () => {
+		const long = "x\n".repeat(MAX_READ_LINES + 10)
+		expect(sliceCellSource(long).split("\n").at(-1)).toBe(`[10 more lines. Use offset=${MAX_READ_LINES + 1} to continue.]`)
+
+		// One line is enough to blow the budget on its own, so the line count alone bounds nothing.
+		const wide = `${"y".repeat(MAX_READ_BYTES * 2)}\nlast\n`
+		const sliced = sliceCellSource(wide)
+		expect(sliced.startsWith("y".repeat(MAX_READ_BYTES))).toBe(true)
+
+		// Multi-byte text is cut on a code point boundary, so the budget is bytes, not chars.
+		const wide4 = `${"🐍".repeat(MAX_READ_BYTES)}\n`
+		const emoji = sliceCellSource(wide4).split("\n")[0] ?? ""
+		expect(Buffer.byteLength(emoji)).toBe(MAX_READ_BYTES)
+		expect(emoji).toBe("🐍".repeat(MAX_READ_BYTES / 4))
+		expect(sliced.slice(MAX_READ_BYTES)).toBe(
+			`\n[Line truncated at ${MAX_READ_BYTES} bytes: ${MAX_READ_BYTES + 1} more chars]\n[1 more lines. Use offset=2 to continue.]`
+		)
 	})
 
 	test("summary omits null execution counts from formatted rows", async () => {

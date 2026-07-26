@@ -132,6 +132,8 @@ export type NotebookCellSelector = { cellId: string; index?: never } | { cellId?
 export interface NotebookMergeResult {
 	merged: NotebookReadCell
 	removed: NotebookReadCell
+	/** Outputs discarded with the removed cell; the merged cell keeps the anchor's own. */
+	droppedOutputs: number
 }
 
 type RawObject = Record<string, unknown>
@@ -311,7 +313,12 @@ function normalizeOutputText(value: unknown): string {
 	return ""
 }
 
-function isBinaryImageMime(mime: string): boolean {
+/**
+ * SVG is the odd one out: an image whose payload is text. No provider renders it as image
+ * content, and dumping thousands of markup lines is never what a reader wants, so it is
+ * presented like an image and returned as text only when asked for by mime.
+ */
+export function isBinaryImageMime(mime: string): boolean {
 	return mime.startsWith("image/") && mime !== "image/svg+xml"
 }
 
@@ -577,19 +584,62 @@ export function formatNotebookSummary(summary: NotebookSummary): string {
 	return lines.join("\n")
 }
 
-export function sliceCellSource(source: string, lineOffset = 0, lineLimit?: number): string {
-	if (!Number.isInteger(lineOffset) || lineOffset < 0) throw new Error(`Invalid lineOffset: ${lineOffset}`)
+/** Ceiling for one read, whether or not the caller passed a limit. Same bounds as pi's Read tool. */
+export const MAX_READ_LINES = 2000
+export const MAX_READ_BYTES = 50 * 1024
+
+/**
+ * Every text a tool returns goes through here: cell source, output text, attachment markup and
+ * the formatted summary. Reads are bounded by lines and by bytes, since one base64 or minified
+ * line is megabytes on its own, and truncation always says how to continue.
+ *
+ * `lineOffset` is a 1-based line number, matching every file read tool a model already knows
+ * (pi, Claude Code, lovely-ide). Cell and output indexes stay 0-based, as in nbformat.
+ */
+export function sliceCellSource(source: string, lineOffset = 1, lineLimit?: number): string {
+	if (!Number.isInteger(lineOffset) || lineOffset < 1) throw new Error(`Invalid lineOffset: ${lineOffset} (1-based line number)`)
 	if (lineLimit !== undefined && (!Number.isInteger(lineLimit) || lineLimit < 0)) {
 		throw new Error(`Invalid lineLimit: ${lineLimit}`)
 	}
 	const lines = sourceToLines(source)
-	if (lineOffset > lines.length) throw new Error(`lineOffset out of range: ${lineOffset}`)
-	const sliced = lines.slice(lineOffset, lineLimit === undefined ? undefined : lineOffset + lineLimit)
-	const text = sliced.join("")
-	const remainingLines = Math.max(0, lines.length - (lineOffset + sliced.length))
-	if (lineLimit === undefined || remainingLines === 0) return text
-	const continuation = `[${remainingLines} more lines. Use offset=${lineOffset + sliced.length} to continue.]`
-	return text.length === 0 ? continuation : `${text}${text.endsWith("\n") ? "" : "\n"}${continuation}`
+	const start = lineOffset - 1
+	if (start > lines.length) throw new Error(`lineOffset out of range: ${lineOffset} (${lines.length} lines total)`)
+	const sliced = lines.slice(start, start + Math.min(lineLimit ?? MAX_READ_LINES, MAX_READ_LINES))
+	// An empty slice (empty source, offset at the end, limit 0) must still say something: tool
+	// content with no text at all reads as a failure.
+	if (sliced.length === 0) {
+		return lines.length === 0 ? "[Empty]" : `[No lines at offset ${lineOffset}: ${lines.length} lines total]`
+	}
+
+	const kept: string[] = []
+	let bytes = 0
+	for (const line of sliced) {
+		if (kept.length > 0 && bytes + Buffer.byteLength(line) > MAX_READ_BYTES) break
+		kept.push(line)
+		bytes += Buffer.byteLength(line)
+	}
+
+	let text = kept.join("")
+	const notes: string[] = []
+	// A single line over the whole budget is cut mid-line: no offset can resume inside a line.
+	// The cut lands on a code point boundary, so the text stays valid UTF-8 whatever it holds.
+	if (bytes > MAX_READ_BYTES) {
+		let chars = 0
+		let used = 0
+		for (const char of text) {
+			const size = Buffer.byteLength(char)
+			if (used + size > MAX_READ_BYTES) break
+			used += size
+			chars += char.length
+		}
+		notes.push(`[Line truncated at ${MAX_READ_BYTES} bytes: ${text.length - chars} more chars]`)
+		text = text.slice(0, chars)
+	}
+	const remainingLines = lines.length - (start + kept.length)
+	if (remainingLines > 0) notes.push(`[${remainingLines} more lines. Use offset=${lineOffset + kept.length} to continue.]`)
+
+	if (notes.length === 0) return text
+	return `${text}${text.length === 0 || text.endsWith("\n") ? "" : "\n"}${notes.join("\n")}`
 }
 
 export function readCellAtIndex(notebook: Notebook, cellIndex: number): NotebookReadCell {
@@ -716,15 +766,37 @@ export function mergeCell(notebook: Notebook, anchorIndex: number, direction: "a
 	}
 
 	const source = direction === "above" ? joinCellSources(other.source, anchor.source) : joinCellSources(anchor.source, other.source)
+	const attachments = mergeAttachments(anchor, other)
+	// The removed cell's outputs go with it, as in VSCode's joinNotebookCells; JupyterLab drops
+	// both cells' outputs. Either way the caller is told, since nothing else would show the loss.
+	const droppedOutputs = (other.outputs ?? []).length
 
-	notebook.cells[anchorIndex] = { ...anchor, source }
+	notebook.cells[anchorIndex] = { ...anchor, source, ...(attachments === undefined ? {} : { attachments }) }
 	notebook.cells.splice(otherIndex, 1)
 	const mergedIndex = direction === "above" ? anchorIndex - 1 : anchorIndex
 
 	return {
 		merged: readCell(requireCell(notebook, mergedIndex), mergedIndex),
-		removed: readCell(other, otherIndex)
+		removed: readCell(other, otherIndex),
+		droppedOutputs
 	}
+}
+
+/**
+ * Attachments are unioned across both cells, the way JupyterLab merges them: the merged source
+ * keeps every `attachment:key` reference, so dropping one cell's bundle would break its images.
+ * A key claimed by both with different payloads is ambiguous and refused rather than picked.
+ */
+function mergeAttachments(anchor: NotebookCell, other: NotebookCell): NotebookAttachments | undefined {
+	if (anchor.attachments === undefined || other.attachments === undefined) return anchor.attachments ?? other.attachments
+
+	for (const [key, value] of Object.entries(other.attachments)) {
+		const claimed = anchor.attachments[key]
+		if (claimed !== undefined && JSON.stringify(claimed) !== JSON.stringify(value)) {
+			throw new Error(`Both cells have a different attachment named "${key}"; rename one before merging`)
+		}
+	}
+	return { ...other.attachments, ...anchor.attachments }
 }
 
 export interface NotebookReadOutput {
@@ -800,12 +872,12 @@ export function readCellOutput(notebook: Notebook, cellIndex: number, outputInde
 		const entries = displayDataEntries(data)
 		if (selectedMime === undefined) {
 			// One element per MIME variant, same shape as the summary: variants whose content is not
-			// text (images) or is empty self-close, the rest wrap their text so a repr like
-			// `<module.Class>` cannot be read as markup.
+			// text (images, SVG included) or is empty self-close, the rest wrap their text so a repr
+			// like `<module.Class>` cannot be read as markup.
 			const text = entries
 				.map(entry => {
 					const head = `<output mime=${quoteAttribute(entry.mime)}`
-					if (entry.image !== undefined || entry.text.length === 0) return `${head} />`
+					if (entry.mime.startsWith("image/") || entry.text.length === 0) return `${head} />`
 					return `${head}>\n${trimTrailingNewline(entry.text)}\n</output>`
 				})
 				.join("\n")

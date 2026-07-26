@@ -47,6 +47,11 @@ Root `README.md` is the project entry point; each package carries its own npm-fa
 - `notebook_read_cell_output` on a rich output with no `mime` uses the same element shape, one
   `<output mime=...>` per variant; image and empty variants self-close, which also tells the
   model an image existed under `includeImages: false`.
+- `image/svg+xml` is an image whose payload is text: it self-closes like any image instead of
+  dumping thousands of markup lines into a default read, and is returned as text (paginated)
+  only when requested by mime. As attachment content it goes out as text either way — sent as
+  image content it would just fail the host's resizer with a misleading size note — decoding
+  base64 when it is stored that way, which is what JupyterLab does with pasted images.
 - `outputIndex` is optional: omitted means the cell's only output, and more than one output is an
   error naming the count, never a silent pick. 94% of output-bearing cells in the fixtures and
   the lovely-tensors/lovely-numpy notebooks have exactly one output.
@@ -57,6 +62,18 @@ Root `README.md` is the project entry point; each package carries its own npm-fa
   marker, 500 chars per line, and `data:` image URIs replaced by `[image: mime/type]` — one
   embedded image is a single line, so the line cap alone does not bound it. `sourceLines` still
   counts raw source, so `lines=` stays consistent with read pagination.
+- `sliceCellSource` is the single gate every returned text passes through — cell source, output
+  text, SVG attachment markup, formatted summary. Reads are capped at 2000 lines *or* 50KB
+  (pi's Read tool bounds), even when the caller passes a larger `lineLimit`: one base64 or
+  minified line is megabytes, so a line count alone bounds nothing. Truncation always ends in
+  the offset to continue from; a single over-budget line is cut mid-line (on a code point
+  boundary) and says so, since no offset can resume inside a line.
+- Line offsets are 1-based, like every file read tool a model already knows (pi, Claude Code,
+  lovely-ide); cell and output indexes stay 0-based as in nbformat. Both are spelled out in the
+  schemas and in the shared guidelines, and truncation notes quote the exact offset to pass back.
+  Pi's `path:start-end` read header assumed 1-based line numbers all along.
+- An empty slice (empty source, offset at the end, `lineLimit: 0`) returns `[Empty]` or
+  `[No lines at offset N: ...]`. Tool content with no text at all reads as a failure.
 
 `packages/core/src/tools.ts` — runners + typebox schemas; `src/index.ts` re-exports both.
 
@@ -83,8 +100,13 @@ Notable tool semantics: `notebook_create` refuses an existing path, since replac
 with an empty one destroys every cell and output, and writes `language_info.name` (a language
 like `python`, not a kernel name like `python3`) while leaving `kernelspec` to the editor; read returns raw source only (metadata is
 summary-only); markdown `data:` URI images become `[image: mime/type]` markers plus image
-content; type changes clear fields invalid for the target type; merge requires an adjacent
-same-type cell and keeps the anchor id.
+content; type changes clear fields invalid for the target type.
+
+Merge requires an adjacent same-type cell and keeps the anchor's id, metadata and outputs. Both
+cells' attachments are unioned, as JupyterLab does, because the merged source keeps every
+`attachment:key` reference; a key claimed by both with different payloads is refused rather than
+picked. The removed cell's outputs go with it (VSCode's join does the same, JupyterLab drops both
+cells' outputs) and the count is reported, since nothing else would show the loss.
 
 ## Adapters
 
@@ -113,7 +135,7 @@ same-type cell and keeps the anchor id.
 
 ## Tests and tooling
 
-- `bun test` at root: 84 tests, green.
+- `bun test` at root: 97 tests, green.
 - `packages/core/test/notebook-core.test.ts` covers parse/validation, pure ops, formatting,
   load/save roundtrips. One `notebook-*.tool.test.ts` per tool, one
   `notebook-*.workflow.test.ts` per multi-step flow.
@@ -151,6 +173,9 @@ cellId/index selectors. Outputs are preserved on mutation. No `NotebookSession` 
 
 ## Gaps
 
+- Text reads are bounded, but byte truncation slices JavaScript characters rather than UTF-8
+  bytes. Non-ASCII single lines can exceed the 50KB ceiling and report a negative remaining-char
+  count. SVG attachment reads now support line slices and continuation offsets.
 - Verification: tests, direct Pi tool calls on a copied fixture, `bun run tool` smoke runs, a
   stub-`ExtensionAPI` registration check, and a full pass of all 13 tools through Claude Code
   against the MCP server (reads, mutations, images, attachments, error paths, concurrent calls).

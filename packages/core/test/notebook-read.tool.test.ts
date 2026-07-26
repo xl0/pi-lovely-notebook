@@ -12,10 +12,10 @@ test("runNotebookReadCell supports reading by index and line slice", async () =>
 	const result = await notebookReadCellTool.run({
 		path: join(FIXTURE_DIR, "lovely-history.ipynb"),
 		index: 4,
-		lineOffset: 1,
+		lineOffset: 2,
 		lineLimit: 1
 	})
-	expect(firstText(result)).toBe('t = torch.tensor(10, device="cuda")\n[1 more lines. Use offset=2 to continue.]')
+	expect(firstText(result)).toBe('t = torch.tensor(10, device="cuda")\n[1 more lines. Use offset=3 to continue.]')
 })
 
 test("runNotebookReadCell rejects invalid selectors", async () => {

@@ -28,6 +28,6 @@ test("runNotebookSummary supports line slices", async () => {
 		lineOffset: 1,
 		lineLimit: 1
 	})
-	expect(firstText(result)?.startsWith('<cell index="0" id="20735603" type="md"')).toBe(true)
+	expect(firstText(result)?.startsWith("<meta nbformat=")).toBe(true)
 	expect(firstText(result)).toContain("Use offset=2 to continue.")
 })
