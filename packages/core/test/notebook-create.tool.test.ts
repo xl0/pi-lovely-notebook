@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadNotebook } from "../src/notebook"
@@ -14,10 +14,10 @@ test("runNotebookCreate creates empty notebook with default language", async () 
 		const result = await notebookCreateTool.run({ path })
 		const notebook = await loadNotebook(path)
 
-		expect(firstText(result)).toBe(`Created notebook ${path} with language python3.`)
+		expect(firstText(result)).toBe(`Created notebook ${path} with language python.`)
 		expect(notebook).toEqual({
 			cells: [],
-			metadata: { language_info: { name: "python3" } },
+			metadata: { language_info: { name: "python" } },
 			nbformat: 4,
 			nbformat_minor: 5
 		})
@@ -26,7 +26,7 @@ test("runNotebookCreate creates empty notebook with default language", async () 
 	}
 })
 
-test("runNotebookCreate accepts language and overwrites existing file", async () => {
+test("runNotebookCreate accepts a language and refuses to clobber an existing file", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "notebook-test-"))
 	const customPath = join(dir, "custom.ipynb")
 	const fixture = await createTempNotebook("exists.ipynb", "already here")
@@ -35,8 +35,10 @@ test("runNotebookCreate accepts language and overwrites existing file", async ()
 		await notebookCreateTool.run({ path: customPath, language: "r" })
 		expect((await loadNotebook(customPath)).metadata?.language_info?.name).toBe("r")
 
-		await notebookCreateTool.run({ path: fixture.path, language: "r" })
-		expect((await loadNotebook(fixture.path)).metadata?.language_info?.name).toBe("r")
+		await expect(notebookCreateTool.run({ path: fixture.path, language: "r" })).rejects.toThrow(
+			`Notebook already exists: ${fixture.path}. Delete it first to replace it.`
+		)
+		expect(await readFile(fixture.path, "utf8")).toBe("already here")
 	} finally {
 		await rm(dir, { recursive: true, force: true })
 		await fixture.cleanup()

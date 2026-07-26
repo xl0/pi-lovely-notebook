@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises"
 import { type Static, type TUnsafe, Type } from "typebox"
 import type { Notebook } from "./notebook"
 import {
@@ -99,18 +100,26 @@ export const notebookSummaryTool = {
 
 const notebookCreateParams = Type.Object({
 	path: Type.String({ description: "Path for the new .ipynb notebook." }),
-	language: Type.Optional(Type.String({ description: "Notebook language_info.name. Defaults to python3." }))
+	language: Type.Optional(
+		Type.String({ description: "Notebook language (metadata.language_info.name), e.g. python or julia. Defaults to python." })
+	)
 })
 
 async function runNotebookCreate(params: Static<typeof notebookCreateParams>): Promise<NotebookToolContent> {
-	const language = params.language ?? "python3"
+	const language = params.language ?? "python"
+	// Never clobber a notebook: an empty replacement destroys every cell and output, unrecoverably.
+	const exists = await access(params.path).then(
+		() => true,
+		() => false
+	)
+	if (exists) throw new Error(`Notebook already exists: ${params.path}. Delete it first to replace it.`)
 	await saveNotebook(params.path, createNotebook(language))
 	return [{ type: "text", text: `Created notebook ${params.path} with language ${language}.` }]
 }
 
 export const notebookCreateTool = {
 	name: "notebook_create",
-	description: "Create a new empty Jupyter notebook.",
+	description: "Create a new empty Jupyter notebook. Fails if the path already exists.",
 	params: notebookCreateParams,
 	run: runNotebookCreate
 } as const
